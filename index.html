@@ -1,0 +1,1508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ghostty</title>
+    <style>
+        :root {
+            --bg: #282c34;
+            --fg: #ffffff;
+            --cursor: #ffffff;
+            --chrome: #282c34;
+            --tab: #32363e;
+            --cell-w: 8px;
+            --cell-h: 17px;
+            --cols: 80;
+            --rows: 24;
+            --pad-x: 8px;
+            --pad-y: 8px;
+            --font-size: 13px;
+        }
+        html, body {
+            margin: 0;
+            height: 100%;
+            background: #1a1a1c;
+            color: var(--fg);
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+        }
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100%;
+        }
+        #desktop {
+            width: min(1100px, calc(100vw - 48px));
+            height: min(720px, calc(100vh - 48px));
+            display: flex;
+            flex-direction: column;
+        }
+        #window {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            background: var(--chrome);
+            border-radius: 10px;
+            box-shadow:
+                0 0 0 1px rgba(255, 255, 255, 0.08),
+                0 24px 80px rgba(0, 0, 0, 0.55);
+            overflow: hidden;
+        }
+        #titlebar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            height: 38px;
+            padding: 0 12px;
+            flex: 0 0 38px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0));
+            user-select: none;
+        }
+        #traffic {
+            display: flex;
+            gap: 8px;
+            flex: 0 0 auto;
+        }
+        #traffic span {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: block;
+        }
+        #traffic .close { background: #ff5f57; }
+        #traffic .min { background: #febc2e; }
+        #traffic .max { background: #28c840; }
+        #tab {
+            display: flex;
+            align-items: center;
+            height: 26px;
+            padding: 0 12px;
+            border-radius: 6px;
+            background: var(--tab);
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.86);
+            max-width: 46%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        #title {
+            flex: 1;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 590;
+            color: rgba(255, 255, 255, 0.72);
+            pointer-events: none;
+        }
+        #term-shell {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            position: relative;
+            background: var(--bg);
+        }
+        #screen-wrap {
+            position: relative;
+            flex: 1;
+            min-width: 0;
+            padding: var(--pad-y) var(--pad-x);
+            overflow: hidden;
+            font-family: "JetBrains Mono", "SF Mono", Menlo, "Cascadia Mono", Consolas, monospace;
+            font-size: var(--font-size);
+            line-height: var(--cell-h);
+            font-feature-settings: "calt" 0, "liga" 0;
+            cursor: text;
+        }
+        #screen-wrap:focus,
+        #screen:focus {
+            outline: none;
+        }
+        #screen {
+            margin: 0;
+            padding: 0;
+            width: calc(var(--cols) * var(--cell-w));
+            height: calc(var(--rows) * var(--cell-h));
+            color: var(--fg);
+            background: var(--bg);
+            white-space: pre;
+            overflow: hidden;
+            tab-size: 8;
+            caret-color: transparent;
+        }
+        #screen, #screen * {
+            font-family: inherit !important;
+            font-size: inherit !important;
+            line-height: inherit !important;
+        }
+        #screen ::selection,
+        #screen-wrap ::selection {
+            background: var(--fg);
+            color: var(--bg);
+        }
+        #cursor {
+            position: absolute;
+            left: var(--pad-x);
+            top: var(--pad-y);
+            width: var(--cell-w);
+            height: var(--cell-h);
+            margin: 0;
+            padding: 0;
+            border: none;
+            background: var(--cursor);
+            pointer-events: none;
+            display: none;
+            z-index: 2;
+            box-sizing: border-box;
+            mix-blend-mode: difference;
+        }
+        #cursor.visible { display: block; }
+        #cursor.blink { animation: cursor-blink 1.06s step-end infinite; }
+        #cursor.blink-reset { animation: none; }
+        #cursor.bar {
+            width: 2px;
+            mix-blend-mode: normal;
+        }
+        #cursor.underline {
+            height: 2px;
+            margin-top: calc(var(--cell-h) - 2px);
+            mix-blend-mode: normal;
+        }
+        @keyframes cursor-blink {
+            50% { background: transparent; }
+        }
+        #scrollbar {
+            position: relative;
+            width: 11px;
+            flex: 0 0 11px;
+            background: transparent;
+            cursor: pointer;
+            user-select: none;
+        }
+        #scrollbar-thumb {
+            position: absolute;
+            left: 3px;
+            right: 2px;
+            top: 0;
+            min-height: 18px;
+            background: rgba(255, 255, 255, 0.28);
+            border-radius: 4px;
+            cursor: grab;
+        }
+        #scrollbar-thumb:hover,
+        #scrollbar-thumb.dragging {
+            background: rgba(255, 255, 255, 0.45);
+        }
+        #scrollbar-thumb.dragging { cursor: grabbing; }
+        #bell-flash {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: rgba(255, 255, 255, 0.12);
+            opacity: 0;
+            transition: opacity 80ms linear;
+            z-index: 3;
+        }
+        #bell-flash.on { opacity: 1; }
+        #status-bar {
+            display: none;
+        }
+        #boot-error {
+            display: none;
+            margin: 16px;
+            padding: 12px 14px;
+            border-radius: 8px;
+            background: #3b1d1d;
+            color: #ffb4b4;
+            font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+            white-space: pre-wrap;
+        }
+        #window.error #boot-error { display: block; }
+        #window.error #term-shell { display: none; }
+    </style>
+</head>
+<body>
+    <div id="desktop">
+        <div id="window">
+            <div id="titlebar">
+                <div id="traffic" aria-hidden="true">
+                    <span class="close"></span>
+                    <span class="min"></span>
+                    <span class="max"></span>
+                </div>
+                <div id="tab">Ghostty</div>
+                <div id="title">Ghostty</div>
+            </div>
+            <div id="term-shell">
+                <div id="screen-wrap">
+                    <div id="screen" tabindex="0" role="application" aria-label="Terminal"></div>
+                    <div id="cursor" aria-hidden="true"></div>
+                    <div id="bell-flash" aria-hidden="true"></div>
+                </div>
+                <div id="scrollbar" title="Scrollback" aria-label="Scrollback" role="scrollbar">
+                    <div id="scrollbar-thumb"></div>
+                </div>
+            </div>
+            <pre id="boot-error"></pre>
+        </div>
+    </div>
+
+    <script>
+        const GHOSTTY_SUCCESS = 0;
+        const GHOSTTY_OUT_OF_SPACE = -3;
+        const GHOSTTY_FORMATTER_FORMAT_HTML = 2;
+        const GHOSTTY_KEY_ACTION_RELEASE = 0;
+        const GHOSTTY_KEY_ACTION_PRESS = 1;
+        const GHOSTTY_KEY_ACTION_REPEAT = 2;
+        const GHOSTTY_POINT_TAG_VIEWPORT = 1;
+        const GHOSTTY_TERMINAL_DATA_CURSOR_X = 3;
+        const GHOSTTY_TERMINAL_DATA_CURSOR_Y = 4;
+        const GHOSTTY_TERMINAL_DATA_CURSOR_VISIBLE = 7;
+        const GHOSTTY_TERMINAL_DATA_SCROLLBAR = 9;
+        const GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING = 11;
+        const GHOSTTY_TERMINAL_DATA_TITLE = 12;
+        const GHOSTTY_TERMINAL_DATA_COLOR_FOREGROUND = 18;
+        const GHOSTTY_TERMINAL_DATA_COLOR_BACKGROUND = 19;
+        const GHOSTTY_TERMINAL_DATA_COLOR_CURSOR = 20;
+        const GHOSTTY_TERMINAL_DATA_COLOR_PALETTE = 21;
+        const GHOSTTY_TERMINAL_DATA_SCROLLBACK_ROWS = 15;
+        const GHOSTTY_TERMINAL_DATA_VIEWPORT_ACTIVE = 32;
+        const GHOSTTY_TERMINAL_DATA_MODE = 37;
+        const GHOSTTY_TERMINAL_OPT_USERDATA = 0;
+        const GHOSTTY_TERMINAL_OPT_WRITE_PTY = 1;
+        const GHOSTTY_TERMINAL_OPT_BELL = 2;
+        const GHOSTTY_TERMINAL_OPT_TITLE_CHANGED = 5;
+        const GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND = 11;
+        const GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND = 12;
+        const GHOSTTY_TERMINAL_OPT_COLOR_CURSOR = 13;
+        const GHOSTTY_TERMINAL_OPT_COLOR_PALETTE = 14;
+        const GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_STYLE = 22;
+        const GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES = 27;
+        const GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES = 28;
+        const GHOSTTY_SCROLL_VIEWPORT_BOTTOM = 1;
+        const GHOSTTY_SCROLL_VIEWPORT_DELTA = 2;
+        const GHOSTTY_SCROLL_VIEWPORT_ROW = 3;
+        const GHOSTTY_TERMINAL_CURSOR_STYLE_BLOCK = 1;
+        const GHOSTTY_MOUSE_ACTION_PRESS = 0;
+        const GHOSTTY_MOUSE_ACTION_RELEASE = 1;
+        const GHOSTTY_MOUSE_ACTION_MOTION = 2;
+        const GHOSTTY_MOUSE_BUTTON_LEFT = 1;
+        const GHOSTTY_MOUSE_BUTTON_RIGHT = 2;
+        const GHOSTTY_MOUSE_BUTTON_MIDDLE = 3;
+        const GHOSTTY_MOUSE_BUTTON_FOUR = 4;
+        const GHOSTTY_MOUSE_BUTTON_FIVE = 5;
+        const GHOSTTY_FOCUS_GAINED = 0;
+        const GHOSTTY_FOCUS_LOST = 1;
+        const MODE_FOCUS_EVENT = 1004;
+        const MODE_BRACKETED_PASTE = 2004;
+        const MODE_CURSOR_BLINKING = 12;
+        const SCROLLBACK_MAX_BYTES = 2 * 1024 * 1024;
+        const SCROLLBACK_MAX_LINES = 10000;
+
+        const keyCodeMap = {
+            'Backquote': 1, 'Backslash': 2, 'BracketLeft': 3, 'BracketRight': 4,
+            'Comma': 5, 'Digit0': 6, 'Digit1': 7, 'Digit2': 8, 'Digit3': 9,
+            'Digit4': 10, 'Digit5': 11, 'Digit6': 12, 'Digit7': 13, 'Digit8': 14,
+            'Digit9': 15, 'Equal': 16, 'IntlBackslash': 17, 'IntlRo': 18, 'IntlYen': 19,
+            'KeyA': 20, 'KeyB': 21, 'KeyC': 22, 'KeyD': 23, 'KeyE': 24, 'KeyF': 25,
+            'KeyG': 26, 'KeyH': 27, 'KeyI': 28, 'KeyJ': 29, 'KeyK': 30, 'KeyL': 31,
+            'KeyM': 32, 'KeyN': 33, 'KeyO': 34, 'KeyP': 35, 'KeyQ': 36, 'KeyR': 37,
+            'KeyS': 38, 'KeyT': 39, 'KeyU': 40, 'KeyV': 41, 'KeyW': 42, 'KeyX': 43,
+            'KeyY': 44, 'KeyZ': 45, 'Minus': 46, 'Period': 47, 'Quote': 48,
+            'Semicolon': 49, 'Slash': 50,
+            'AltLeft': 51, 'AltRight': 52, 'Backspace': 53, 'CapsLock': 54,
+            'ContextMenu': 55, 'ControlLeft': 56, 'ControlRight': 57, 'Enter': 58,
+            'MetaLeft': 59, 'MetaRight': 60, 'ShiftLeft': 61, 'ShiftRight': 62,
+            'Space': 63, 'Tab': 64, 'Convert': 65, 'KanaMode': 66, 'NonConvert': 67,
+            'Delete': 68, 'End': 69, 'Help': 70, 'Home': 71, 'Insert': 72,
+            'PageDown': 73, 'PageUp': 74,
+            'ArrowDown': 75, 'ArrowLeft': 76, 'ArrowRight': 77, 'ArrowUp': 78,
+            'NumLock': 79, 'Numpad0': 80, 'Numpad1': 81, 'Numpad2': 82, 'Numpad3': 83,
+            'Numpad4': 84, 'Numpad5': 85, 'Numpad6': 86, 'Numpad7': 87, 'Numpad8': 88,
+            'Numpad9': 89, 'NumpadAdd': 90, 'NumpadBackspace': 91, 'NumpadClear': 92,
+            'NumpadClearEntry': 93, 'NumpadComma': 94, 'NumpadDecimal': 95,
+            'NumpadDivide': 96, 'NumpadEnter': 97, 'NumpadEqual': 98,
+            'NumpadMemoryAdd': 99, 'NumpadMemoryClear': 100, 'NumpadMemoryRecall': 101,
+            'NumpadMemoryStore': 102, 'NumpadMemorySubtract': 103, 'NumpadMultiply': 104,
+            'NumpadParenLeft': 105, 'NumpadParenRight': 106, 'NumpadSubtract': 107,
+            'NumpadSeparator': 108, 'NumpadUp': 109, 'NumpadDown': 110, 'NumpadRight': 111,
+            'NumpadLeft': 112, 'NumpadBegin': 113, 'NumpadHome': 114, 'NumpadEnd': 115,
+            'NumpadInsert': 116, 'NumpadDelete': 117, 'NumpadPageUp': 118, 'NumpadPageDown': 119,
+            'Escape': 120, 'F1': 121, 'F2': 122, 'F3': 123, 'F4': 124, 'F5': 125,
+            'F6': 126, 'F7': 127, 'F8': 128, 'F9': 129, 'F10': 130, 'F11': 131,
+            'F12': 132, 'F13': 133, 'F14': 134, 'F15': 135, 'F16': 136, 'F17': 137,
+            'F18': 138, 'F19': 139, 'F20': 140, 'F21': 141, 'F22': 142, 'F23': 143,
+            'F24': 144, 'F25': 145, 'Fn': 146, 'FnLock': 147, 'PrintScreen': 148,
+            'ScrollLock': 149, 'Pause': 150,
+            'BrowserBack': 151, 'BrowserFavorites': 152, 'BrowserForward': 153,
+            'BrowserHome': 154, 'BrowserRefresh': 155, 'BrowserSearch': 156,
+            'BrowserStop': 157, 'Eject': 158, 'LaunchApp1': 159, 'LaunchApp2': 160,
+            'LaunchMail': 161, 'MediaPlayPause': 162, 'MediaSelect': 163,
+            'MediaStop': 164, 'MediaTrackNext': 165, 'MediaTrackPrevious': 166,
+            'Power': 167, 'Sleep': 168, 'AudioVolumeDown': 169, 'AudioVolumeMute': 170,
+            'AudioVolumeUp': 171, 'WakeUp': 172, 'Copy': 173, 'Cut': 174, 'Paste': 175,
+        };
+
+        const isMac = /Mac|iPhone|iPad/.test(navigator.platform) ||
+            (navigator.userAgentData && navigator.userAgentData.platform === 'macOS');
+
+        let wasmInstance = null;
+        let wasmMemory = null;
+        let typeLayout = null;
+        let termPtr = null;
+        let encoderPtr = null;
+        let mouseEncoderPtr = null;
+        let mouseEventPtr = null;
+        let ws = null;
+        let cols = 80;
+        let rows = 24;
+        let cellW = 8;
+        let cellH = 17;
+        let fontSize = 13;
+        let lastScrollbar = { total: 24, offset: 0, len: 24 };
+        let scrollbarDrag = null;
+        let renderScheduled = false;
+        let mouseTracking = false;
+        let mousePressed = false;
+
+        function getBuffer() {
+            return wasmMemory.buffer;
+        }
+
+        function fieldInfo(structName, fieldName) {
+            return typeLayout[structName].fields[fieldName];
+        }
+
+        function setField(view, structName, fieldName, value) {
+            const field = fieldInfo(structName, fieldName);
+            switch (field.type) {
+                case 'u8': case 'bool': view.setUint8(field.offset, value); break;
+                case 'u16': view.setUint16(field.offset, value, true); break;
+                case 'u32': case 'enum': view.setUint32(field.offset, value, true); break;
+                case 'i32': view.setInt32(field.offset, value, true); break;
+                case 'u64': view.setBigUint64(field.offset, BigInt(value), true); break;
+                case 'f32': view.setFloat32(field.offset, value, true); break;
+                default: throw new Error(`Unsupported field type: ${field.type}`);
+            }
+        }
+
+        function allocBytes(n) {
+            return wasmInstance.exports.ghostty_wasm_alloc_u8_array(n);
+        }
+
+        function freeBytes(ptr, n) {
+            wasmInstance.exports.ghostty_wasm_free_u8_array(ptr, n);
+        }
+
+        function readU32(ptr) {
+            return new DataView(getBuffer()).getUint32(ptr, true);
+        }
+
+        function writeU32(ptr, value) {
+            new DataView(getBuffer()).setUint32(ptr, value, true);
+        }
+
+        function sendPty(bytes) {
+            if (!bytes || !bytes.length || !ws || ws.readyState !== WebSocket.OPEN) return;
+            ws.send(bytes);
+        }
+
+        function sendResize() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            ws.send(`resize ${cols} ${rows}`);
+        }
+
+        function encodeLeb128(n) {
+            const out = [];
+            do {
+                let byte = n & 0x7f;
+                n >>>= 7;
+                if (n) byte |= 0x80;
+                out.push(byte);
+            } while (n);
+            return out;
+        }
+
+        function wasmSection(id, body) {
+            return [id, ...encodeLeb128(body.length), ...body];
+        }
+
+        function nameBytes(s) {
+            const bytes = Array.from(s).map((c) => c.charCodeAt(0));
+            return [...encodeLeb128(bytes.length), ...bytes];
+        }
+
+        async function jsToWasmFn(fn, argc) {
+            const typeBody = [1, 0x60, argc, ...Array(argc).fill(0x7f), 0];
+            const importBody = [1, ...nameBytes('e'), ...nameBytes('f'), 0x00, 0x00];
+            const tableBody = [1, 0x70, 0x00, 1];
+            const exportBody = [1, ...nameBytes('t'), 0x01, 0x00];
+            const elemBody = [1, 0x00, 0x41, 0x00, 0x0b, 1, 0x00];
+            const bytes = new Uint8Array([
+                0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+                ...wasmSection(1, typeBody),
+                ...wasmSection(2, importBody),
+                ...wasmSection(4, tableBody),
+                ...wasmSection(7, exportBody),
+                ...wasmSection(9, elemBody),
+            ]);
+            const { instance } = await WebAssembly.instantiate(bytes, { e: { f: fn } });
+            return instance.exports.t.get(0);
+        }
+
+        async function installCallback(jsFn, argc) {
+            const table = wasmInstance.exports.__indirect_function_table;
+            if (!table || typeof table.grow !== 'function') return 0;
+            const wasmFn = await jsToWasmFn(jsFn, argc);
+            const idx = table.grow(1);
+            table.set(idx, wasmFn);
+            return idx;
+        }
+
+        async function loadWasm() {
+            const response = await fetch('/ghostty-vt.wasm');
+            const wasmBytes = await response.arrayBuffer();
+            const wasmModule = await WebAssembly.instantiate(wasmBytes, {
+                env: {
+                    log: (ptr, len) => {
+                        const bytes = new Uint8Array(
+                            wasmModule.instance.exports.memory.buffer, ptr, len
+                        );
+                        console.log('[wasm]', new TextDecoder().decode(bytes));
+                    }
+                }
+            });
+            wasmInstance = wasmModule.instance;
+            wasmMemory = wasmInstance.exports.memory;
+            const jsonPtr = wasmInstance.exports.ghostty_type_json();
+            const jsonStr = new TextDecoder().decode(
+                new Uint8Array(wasmMemory.buffer, jsonPtr, wasmMemory.buffer.byteLength - jsonPtr)
+            ).split('\0')[0];
+            typeLayout = JSON.parse(jsonStr);
+        }
+
+        function allocRgb(r, g, b) {
+            const size = typeLayout['GhosttyColorRgb'].size;
+            const ptr = allocBytes(size);
+            const view = new DataView(getBuffer(), ptr, size);
+            setField(view, 'GhosttyColorRgb', 'r', r);
+            setField(view, 'GhosttyColorRgb', 'g', g);
+            setField(view, 'GhosttyColorRgb', 'b', b);
+            return { ptr, size };
+        }
+
+        function applyDefaultTheme() {
+            const fg = allocRgb(0xff, 0xff, 0xff);
+            const bg = allocRgb(0x28, 0x2c, 0x34);
+            const cursor = allocRgb(0xff, 0xff, 0xff);
+            wasmInstance.exports.ghostty_terminal_set(
+                termPtr, GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, fg.ptr
+            );
+            wasmInstance.exports.ghostty_terminal_set(
+                termPtr, GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, bg.ptr
+            );
+            wasmInstance.exports.ghostty_terminal_set(
+                termPtr, GHOSTTY_TERMINAL_OPT_COLOR_CURSOR, cursor.ptr
+            );
+            freeBytes(fg.ptr, fg.size);
+            freeBytes(bg.ptr, bg.size);
+            freeBytes(cursor.ptr, cursor.size);
+
+            const palSize = typeLayout['GhosttyColorRgb'].size * 256;
+            const palPtr = allocBytes(palSize);
+            wasmInstance.exports.ghostty_color_palette_default(palPtr);
+            wasmInstance.exports.ghostty_terminal_set(
+                termPtr, GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, palPtr
+            );
+            freeBytes(palPtr, palSize);
+
+            const stylePtr = wasmInstance.exports.ghostty_wasm_alloc_u32
+                ? wasmInstance.exports.ghostty_wasm_alloc_u32()
+                : allocBytes(4);
+            new DataView(getBuffer()).setUint32(stylePtr, GHOSTTY_TERMINAL_CURSOR_STYLE_BLOCK, true);
+            wasmInstance.exports.ghostty_terminal_set(
+                termPtr, GHOSTTY_TERMINAL_OPT_DEFAULT_CURSOR_STYLE, stylePtr
+            );
+            if (wasmInstance.exports.ghostty_wasm_free_u32) {
+                wasmInstance.exports.ghostty_wasm_free_u32(stylePtr);
+            } else {
+                freeBytes(stylePtr, 4);
+            }
+        }
+
+        function createTerminal() {
+            const termPtrPtr = wasmInstance.exports.ghostty_wasm_alloc_opaque();
+            const newResult = wasmInstance.exports.ghostty_terminal_new(0, termPtrPtr, cols, rows);
+            if (newResult !== GHOSTTY_SUCCESS) {
+                throw new Error(`ghostty_terminal_new failed: ${newResult}`);
+            }
+            termPtr = readU32(termPtrPtr);
+            wasmInstance.exports.ghostty_wasm_free_opaque(termPtrPtr);
+
+            const bytesPtr = wasmInstance.exports.ghostty_wasm_alloc_usize();
+            writeU32(bytesPtr, SCROLLBACK_MAX_BYTES);
+            wasmInstance.exports.ghostty_terminal_set(
+                termPtr, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES, bytesPtr
+            );
+            wasmInstance.exports.ghostty_wasm_free_usize(bytesPtr);
+
+            const linesPtr = wasmInstance.exports.ghostty_wasm_alloc_usize();
+            writeU32(linesPtr, SCROLLBACK_MAX_LINES);
+            wasmInstance.exports.ghostty_terminal_set(
+                termPtr, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, linesPtr
+            );
+            wasmInstance.exports.ghostty_wasm_free_usize(linesPtr);
+
+            applyDefaultTheme();
+        }
+
+        function createEncoder() {
+            const encoderPtrPtr = wasmInstance.exports.ghostty_wasm_alloc_opaque();
+            const result = wasmInstance.exports.ghostty_key_encoder_new(0, encoderPtrPtr);
+            if (result !== GHOSTTY_SUCCESS) {
+                throw new Error(`ghostty_key_encoder_new failed: ${result}`);
+            }
+            encoderPtr = readU32(encoderPtrPtr);
+            wasmInstance.exports.ghostty_wasm_free_opaque(encoderPtrPtr);
+            syncEncoderFromTerminal();
+        }
+
+        function createMouseEncoder() {
+            const ptrPtr = wasmInstance.exports.ghostty_wasm_alloc_opaque();
+            let result = wasmInstance.exports.ghostty_mouse_encoder_new(0, ptrPtr);
+            if (result !== GHOSTTY_SUCCESS) {
+                wasmInstance.exports.ghostty_wasm_free_opaque(ptrPtr);
+                return;
+            }
+            mouseEncoderPtr = readU32(ptrPtr);
+            result = wasmInstance.exports.ghostty_mouse_event_new(0, ptrPtr);
+            if (result === GHOSTTY_SUCCESS) {
+                mouseEventPtr = readU32(ptrPtr);
+            }
+            wasmInstance.exports.ghostty_wasm_free_opaque(ptrPtr);
+            syncMouseFromTerminal();
+        }
+
+        function syncEncoderFromTerminal() {
+            if (encoderPtr && termPtr) {
+                wasmInstance.exports.ghostty_key_encoder_setopt_from_terminal(encoderPtr, termPtr);
+            }
+        }
+
+        function syncMouseFromTerminal() {
+            if (mouseEncoderPtr && termPtr) {
+                wasmInstance.exports.ghostty_mouse_encoder_setopt_from_terminal(
+                    mouseEncoderPtr, termPtr
+                );
+                updateMouseEncoderSize();
+            }
+        }
+
+        function updateMouseEncoderSize() {
+            if (!mouseEncoderPtr || !typeLayout['GhosttyMouseEncoderSize']) return;
+            const size = typeLayout['GhosttyMouseEncoderSize'].size;
+            const ptr = allocBytes(size);
+            new Uint8Array(getBuffer(), ptr, size).fill(0);
+            const view = new DataView(getBuffer(), ptr, size);
+            setField(view, 'GhosttyMouseEncoderSize', 'size', size);
+            const screenW = Math.round(cols * cellW);
+            const screenH = Math.round(rows * cellH);
+            if (typeLayout['GhosttyMouseEncoderSize'].fields.screen_width) {
+                setField(view, 'GhosttyMouseEncoderSize', 'screen_width', screenW);
+                setField(view, 'GhosttyMouseEncoderSize', 'screen_height', screenH);
+            }
+            if (typeLayout['GhosttyMouseEncoderSize'].fields.cell_width) {
+                setField(view, 'GhosttyMouseEncoderSize', 'cell_width', Math.round(cellW));
+                setField(view, 'GhosttyMouseEncoderSize', 'cell_height', Math.round(cellH));
+            }
+            wasmInstance.exports.ghostty_mouse_encoder_setopt(mouseEncoderPtr, 2, ptr);
+            freeBytes(ptr, size);
+        }
+
+        async function installEffects() {
+            try {
+                const writePtyIdx = await installCallback((terminal, userdata, dataPtr, len) => {
+                    if (!len) return;
+                    const bytes = new Uint8Array(getBuffer()).slice(dataPtr, dataPtr + len);
+                    sendPty(bytes);
+                }, 4);
+                if (writePtyIdx) {
+                    wasmInstance.exports.ghostty_terminal_set(
+                        termPtr, GHOSTTY_TERMINAL_OPT_WRITE_PTY, writePtyIdx
+                    );
+                }
+
+                const bellIdx = await installCallback(() => flashBell(), 2);
+                if (bellIdx) {
+                    wasmInstance.exports.ghostty_terminal_set(
+                        termPtr, GHOSTTY_TERMINAL_OPT_BELL, bellIdx
+                    );
+                }
+
+                const titleIdx = await installCallback(() => updateTitle(), 2);
+                if (titleIdx) {
+                    wasmInstance.exports.ghostty_terminal_set(
+                        termPtr, GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, titleIdx
+                    );
+                }
+            } catch (err) {
+                console.warn('WASM callbacks unavailable; query replies and bell are disabled.', err);
+            }
+        }
+
+        function flashBell() {
+            const el = document.getElementById('bell-flash');
+            el.classList.add('on');
+            setTimeout(() => el.classList.remove('on'), 90);
+        }
+
+        function allocPoint(tag, x, y) {
+            const size = typeLayout['GhosttyPoint'].size;
+            const ptr = allocBytes(size);
+            new Uint8Array(getBuffer(), ptr, size).fill(0);
+            const view = new DataView(getBuffer(), ptr, size);
+            view.setUint32(0, tag, true);
+            view.setUint16(8, x, true);
+            view.setUint32(12, y, true);
+            return ptr;
+        }
+
+        function gridRefAt(tag, x, y) {
+            const pointPtr = allocPoint(tag, x, y);
+            const refSize = typeLayout['GhosttyGridRef'].size;
+            const refPtr = allocBytes(refSize);
+            new Uint8Array(getBuffer(), refPtr, refSize).fill(0);
+            writeU32(refPtr, refSize);
+            const result = wasmInstance.exports.ghostty_terminal_grid_ref(
+                termPtr, pointPtr, refPtr
+            );
+            freeBytes(pointPtr, typeLayout['GhosttyPoint'].size);
+            if (result !== GHOSTTY_SUCCESS) {
+                freeBytes(refPtr, refSize);
+                throw new Error(`ghostty_terminal_grid_ref failed: ${result}`);
+            }
+            return refPtr;
+        }
+
+        function allocViewportSelection() {
+            const startPtr = gridRefAt(GHOSTTY_POINT_TAG_VIEWPORT, 0, 0);
+            const endPtr = gridRefAt(GHOSTTY_POINT_TAG_VIEWPORT, cols - 1, rows - 1);
+            const selSize = typeLayout['GhosttySelection'].size;
+            const selPtr = allocBytes(selSize);
+            new Uint8Array(getBuffer(), selPtr, selSize).fill(0);
+            const view = new DataView(getBuffer(), selPtr, selSize);
+            view.setUint32(0, selSize, true);
+            const refSize = typeLayout['GhosttyGridRef'].size;
+            new Uint8Array(getBuffer(), selPtr + 4, refSize).set(
+                new Uint8Array(getBuffer(), startPtr, refSize)
+            );
+            new Uint8Array(getBuffer(), selPtr + 16, refSize).set(
+                new Uint8Array(getBuffer(), endPtr, refSize)
+            );
+            freeBytes(startPtr, refSize);
+            freeBytes(endPtr, refSize);
+            return selPtr;
+        }
+
+        function scrollViewport(tag, value = 0) {
+            const size = typeLayout['GhosttyTerminalScrollViewport'].size;
+            const ptr = allocBytes(size);
+            new Uint8Array(getBuffer(), ptr, size).fill(0);
+            const view = new DataView(getBuffer(), ptr, size);
+            view.setUint32(0, tag, true);
+            if (tag === GHOSTTY_SCROLL_VIEWPORT_DELTA) {
+                view.setInt32(8, value, true);
+            } else if (tag === GHOSTTY_SCROLL_VIEWPORT_ROW) {
+                view.setUint32(8, value, true);
+            }
+            wasmInstance.exports.ghostty_terminal_scroll_viewport(termPtr, ptr);
+            freeBytes(ptr, size);
+        }
+
+        function getScrollbarState() {
+            const size = typeLayout['GhosttyTerminalScrollbar'].size;
+            const ptr = allocBytes(size);
+            new Uint8Array(getBuffer(), ptr, size).fill(0);
+            try {
+                const result = wasmInstance.exports.ghostty_terminal_get(
+                    termPtr, GHOSTTY_TERMINAL_DATA_SCROLLBAR, ptr
+                );
+                if (result !== GHOSTTY_SUCCESS) {
+                    return { total: rows, offset: 0, len: rows };
+                }
+                const view = new DataView(getBuffer(), ptr, size);
+                return {
+                    total: Number(view.getBigUint64(0, true)),
+                    offset: Number(view.getBigUint64(8, true)),
+                    len: Number(view.getBigUint64(16, true)),
+                };
+            } finally {
+                freeBytes(ptr, size);
+            }
+        }
+
+        function isViewportActive() {
+            const ptr = wasmInstance.exports.ghostty_wasm_alloc_u8();
+            try {
+                const result = wasmInstance.exports.ghostty_terminal_get(
+                    termPtr, GHOSTTY_TERMINAL_DATA_VIEWPORT_ACTIVE, ptr
+                );
+                if (result !== GHOSTTY_SUCCESS) return true;
+                return new DataView(getBuffer()).getUint8(ptr) !== 0;
+            } finally {
+                wasmInstance.exports.ghostty_wasm_free_u8(ptr);
+            }
+        }
+
+        function getMode(mode) {
+            const size = typeLayout['GhosttyTerminalModeConfig'].size;
+            const ptr = allocBytes(size);
+            new Uint8Array(getBuffer(), ptr, size).fill(0);
+            const view = new DataView(getBuffer(), ptr, size);
+            setField(view, 'GhosttyTerminalModeConfig', 'mode', mode);
+            try {
+                const result = wasmInstance.exports.ghostty_terminal_get(
+                    termPtr, GHOSTTY_TERMINAL_DATA_MODE, ptr
+                );
+                if (result !== GHOSTTY_SUCCESS) return false;
+                return new DataView(getBuffer(), ptr, size).getUint8(
+                    fieldInfo('GhosttyTerminalModeConfig', 'value').offset
+                ) !== 0;
+            } finally {
+                freeBytes(ptr, size);
+            }
+        }
+
+        function getBoolData(id) {
+            const ptr = wasmInstance.exports.ghostty_wasm_alloc_u8();
+            try {
+                const result = wasmInstance.exports.ghostty_terminal_get(termPtr, id, ptr);
+                if (result !== GHOSTTY_SUCCESS) return false;
+                return new DataView(getBuffer()).getUint8(ptr) !== 0;
+            } finally {
+                wasmInstance.exports.ghostty_wasm_free_u8(ptr);
+            }
+        }
+
+        function getRgb(id) {
+            const size = typeLayout['GhosttyColorRgb'].size;
+            const ptr = allocBytes(size);
+            try {
+                const result = wasmInstance.exports.ghostty_terminal_get(termPtr, id, ptr);
+                if (result !== GHOSTTY_SUCCESS) return null;
+                const view = new DataView(getBuffer(), ptr, size);
+                return {
+                    r: view.getUint8(fieldInfo('GhosttyColorRgb', 'r').offset),
+                    g: view.getUint8(fieldInfo('GhosttyColorRgb', 'g').offset),
+                    b: view.getUint8(fieldInfo('GhosttyColorRgb', 'b').offset),
+                };
+            } finally {
+                freeBytes(ptr, size);
+            }
+        }
+
+        function rgbCss(color) {
+            return `rgb(${color.r}, ${color.g}, ${color.b})`;
+        }
+
+        function updateTitle() {
+            const size = typeLayout['GhosttyString'].size;
+            const ptr = allocBytes(size);
+            new Uint8Array(getBuffer(), ptr, size).fill(0);
+            try {
+                const result = wasmInstance.exports.ghostty_terminal_get(
+                    termPtr, GHOSTTY_TERMINAL_DATA_TITLE, ptr
+                );
+                let title = 'Ghostty';
+                if (result === GHOSTTY_SUCCESS) {
+                    const view = new DataView(getBuffer(), ptr, size);
+                    const strPtr = view.getUint32(fieldInfo('GhosttyString', 'ptr').offset, true);
+                    const strLen = view.getUint32(fieldInfo('GhosttyString', 'len').offset, true);
+                    if (strLen > 0) {
+                        title = new TextDecoder().decode(
+                            new Uint8Array(getBuffer(), strPtr, strLen)
+                        );
+                    }
+                }
+                document.getElementById('tab').textContent = title;
+                document.getElementById('title').textContent = title;
+                document.title = title;
+            } finally {
+                freeBytes(ptr, size);
+            }
+        }
+
+        function updateChromeColors() {
+            const bg = getRgb(GHOSTTY_TERMINAL_DATA_COLOR_BACKGROUND) || { r: 0x28, g: 0x2c, b: 0x34 };
+            const fg = getRgb(GHOSTTY_TERMINAL_DATA_COLOR_FOREGROUND) || { r: 0xff, g: 0xff, b: 0xff };
+            const cursor = getRgb(GHOSTTY_TERMINAL_DATA_COLOR_CURSOR) || fg;
+            const root = document.documentElement.style;
+            root.setProperty('--bg', rgbCss(bg));
+            root.setProperty('--fg', rgbCss(fg));
+            root.setProperty('--cursor', rgbCss(cursor));
+            root.setProperty('--chrome', rgbCss(bg));
+        }
+
+        function updateScrollbarUi(state) {
+            lastScrollbar = state;
+            const track = document.getElementById('scrollbar');
+            const thumb = document.getElementById('scrollbar-thumb');
+            const trackH = track.clientHeight || 1;
+            const total = Math.max(state.total, state.len, 1);
+            const visible = Math.min(Math.max(state.len, 1), total);
+            const maxOffset = Math.max(total - visible, 0);
+            const thumbH = Math.max(18, Math.round((visible / total) * trackH));
+            const travel = Math.max(trackH - thumbH, 0);
+            const top = maxOffset === 0 ? 0 : Math.round((state.offset / maxOffset) * travel);
+            thumb.style.height = `${thumbH}px`;
+            thumb.style.top = `${top}px`;
+            thumb.style.display = maxOffset === 0 ? 'none' : 'block';
+        }
+
+        function scrollToOffsetFromTrackY(clientY, thumbAnchorRatio = 0.5) {
+            const track = document.getElementById('scrollbar');
+            const rect = track.getBoundingClientRect();
+            const trackH = rect.height || 1;
+            const total = Math.max(lastScrollbar.total, lastScrollbar.len, 1);
+            const visible = Math.min(Math.max(lastScrollbar.len, 1), total);
+            const maxOffset = Math.max(total - visible, 0);
+            if (maxOffset === 0) {
+                scrollViewport(GHOSTTY_SCROLL_VIEWPORT_BOTTOM);
+                renderScreen();
+                return;
+            }
+            const thumbH = Math.max(18, (visible / total) * trackH);
+            const travel = Math.max(trackH - thumbH, 0);
+            const y = clientY - rect.top - thumbH * thumbAnchorRatio;
+            const ratio = travel === 0 ? 1 : Math.min(1, Math.max(0, y / travel));
+            scrollViewport(GHOSTTY_SCROLL_VIEWPORT_ROW, Math.round(ratio * maxOffset));
+            renderScreen();
+        }
+
+        function writeVt(bytes) {
+            if (!bytes || bytes.length === 0) return;
+            const dataPtr = allocBytes(bytes.length);
+            new Uint8Array(getBuffer()).set(bytes, dataPtr);
+            wasmInstance.exports.ghostty_terminal_vt_write(termPtr, dataPtr, bytes.length);
+            freeBytes(dataPtr, bytes.length);
+            syncEncoderFromTerminal();
+            syncMouseFromTerminal();
+            scheduleRender();
+        }
+
+        function getCursorState() {
+            if (!isViewportActive()) return { x: 0, y: 0, visible: false };
+            const xPtr = wasmInstance.exports.ghostty_wasm_alloc_u16_array(1);
+            const yPtr = wasmInstance.exports.ghostty_wasm_alloc_u16_array(1);
+            const visPtr = wasmInstance.exports.ghostty_wasm_alloc_u8();
+            try {
+                const rx = wasmInstance.exports.ghostty_terminal_get(
+                    termPtr, GHOSTTY_TERMINAL_DATA_CURSOR_X, xPtr);
+                const ry = wasmInstance.exports.ghostty_terminal_get(
+                    termPtr, GHOSTTY_TERMINAL_DATA_CURSOR_Y, yPtr);
+                const rv = wasmInstance.exports.ghostty_terminal_get(
+                    termPtr, GHOSTTY_TERMINAL_DATA_CURSOR_VISIBLE, visPtr);
+                if (rx !== GHOSTTY_SUCCESS || ry !== GHOSTTY_SUCCESS || rv !== GHOSTTY_SUCCESS) {
+                    return { x: 0, y: 0, visible: false };
+                }
+                const view = new DataView(getBuffer());
+                return {
+                    x: Math.max(0, Math.min(cols - 1, view.getUint16(xPtr, true))),
+                    y: Math.max(0, Math.min(rows - 1, view.getUint16(yPtr, true))),
+                    visible: view.getUint8(visPtr) !== 0,
+                };
+            } finally {
+                wasmInstance.exports.ghostty_wasm_free_u16_array(xPtr, 1);
+                wasmInstance.exports.ghostty_wasm_free_u16_array(yPtr, 1);
+                wasmInstance.exports.ghostty_wasm_free_u8(visPtr);
+            }
+        }
+
+        function updateCursorOverlay(cursor) {
+            const el = document.getElementById('cursor');
+            if (!cursor.visible) {
+                el.classList.remove('visible');
+                return;
+            }
+            el.style.transform = `translate(${cursor.x * cellW}px, ${cursor.y * cellH}px)`;
+            el.classList.toggle('blink', getMode(MODE_CURSOR_BLINKING));
+            el.classList.remove('visible');
+            el.classList.add('blink-reset');
+            void el.offsetWidth;
+            el.classList.remove('blink-reset');
+            el.classList.add('visible');
+        }
+
+        function renderScreen() {
+            const selPtr = allocViewportSelection();
+            const FMT_OPTS_SIZE = typeLayout['GhosttyFormatterTerminalOptions'].size;
+            const fmtOptsPtr = allocBytes(FMT_OPTS_SIZE);
+            new Uint8Array(getBuffer(), fmtOptsPtr, FMT_OPTS_SIZE).fill(0);
+            const fmtOptsView = new DataView(getBuffer(), fmtOptsPtr, FMT_OPTS_SIZE);
+            setField(fmtOptsView, 'GhosttyFormatterTerminalOptions', 'size', FMT_OPTS_SIZE);
+            setField(fmtOptsView, 'GhosttyFormatterTerminalOptions', 'emit', GHOSTTY_FORMATTER_FORMAT_HTML);
+            setField(fmtOptsView, 'GhosttyFormatterTerminalOptions', 'unwrap', 0);
+            setField(fmtOptsView, 'GhosttyFormatterTerminalOptions', 'trim', 0);
+            setField(fmtOptsView, 'GhosttyFormatterTerminalOptions', 'extra.palette', 1);
+
+            const extraOffset = fieldInfo('GhosttyFormatterTerminalOptions', 'extra').offset;
+            const extraSize = typeLayout['GhosttyFormatterTerminalExtra'].size;
+            const extraSizeField = fieldInfo('GhosttyFormatterTerminalExtra', 'size');
+            fmtOptsView.setUint32(extraOffset + extraSizeField.offset, extraSize, true);
+
+            const screenOffset = fieldInfo('GhosttyFormatterTerminalExtra', 'screen').offset;
+            const screenSize = typeLayout['GhosttyFormatterScreenExtra'].size;
+            const screenSizeField = fieldInfo('GhosttyFormatterScreenExtra', 'size');
+            fmtOptsView.setUint32(extraOffset + screenOffset + screenSizeField.offset, screenSize, true);
+
+            const selField = fieldInfo('GhosttyFormatterTerminalOptions', 'selection');
+            fmtOptsView.setUint32(selField.offset, selPtr, true);
+
+            const fmtPtrPtr = wasmInstance.exports.ghostty_wasm_alloc_opaque();
+            const fmtResult = wasmInstance.exports.ghostty_formatter_terminal_new(
+                0, fmtPtrPtr, termPtr, fmtOptsPtr
+            );
+            freeBytes(fmtOptsPtr, FMT_OPTS_SIZE);
+            freeBytes(selPtr, typeLayout['GhosttySelection'].size);
+
+            if (fmtResult !== GHOSTTY_SUCCESS) {
+                wasmInstance.exports.ghostty_wasm_free_opaque(fmtPtrPtr);
+                throw new Error(`ghostty_formatter_terminal_new failed: ${fmtResult}`);
+            }
+
+            const fmtPtr = readU32(fmtPtrPtr);
+            wasmInstance.exports.ghostty_wasm_free_opaque(fmtPtrPtr);
+
+            const outPtrPtr = wasmInstance.exports.ghostty_wasm_alloc_opaque();
+            const outLenPtr = wasmInstance.exports.ghostty_wasm_alloc_usize();
+            const formatResult = wasmInstance.exports.ghostty_formatter_format_alloc(
+                fmtPtr, 0, outPtrPtr, outLenPtr
+            );
+
+            if (formatResult !== GHOSTTY_SUCCESS) {
+                wasmInstance.exports.ghostty_formatter_free(fmtPtr);
+                wasmInstance.exports.ghostty_wasm_free_opaque(outPtrPtr);
+                wasmInstance.exports.ghostty_wasm_free_usize(outLenPtr);
+                throw new Error(`ghostty_formatter_format_alloc failed: ${formatResult}`);
+            }
+
+            const outPtr = readU32(outPtrPtr);
+            const outLen = readU32(outLenPtr);
+            const html = new TextDecoder().decode(new Uint8Array(getBuffer(), outPtr, outLen));
+            document.getElementById('screen').innerHTML = html.replaceAll(':root', '#screen');
+
+            mouseTracking = getBoolData(GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING);
+            updateChromeColors();
+            updateTitle();
+            updateCursorOverlay(getCursorState());
+            updateScrollbarUi(getScrollbarState());
+
+            wasmInstance.exports.ghostty_free(0, outPtr, outLen);
+            wasmInstance.exports.ghostty_wasm_free_opaque(outPtrPtr);
+            wasmInstance.exports.ghostty_wasm_free_usize(outLenPtr);
+            wasmInstance.exports.ghostty_formatter_free(fmtPtr);
+        }
+
+        function scheduleRender() {
+            if (renderScheduled) return;
+            renderScheduled = true;
+            requestAnimationFrame(() => {
+                renderScheduled = false;
+                try {
+                    renderScreen();
+                } catch (err) {
+                    console.error(err);
+                }
+            });
+        }
+
+        function getUnshiftedCodepoint(event) {
+            const code = event.code;
+            if (code.startsWith('Key')) return code.substring(3).toLowerCase().codePointAt(0);
+            if (code.startsWith('Digit')) return code.substring(5).codePointAt(0);
+            if (code === 'Space') return 32;
+            const unshiftedSymbols = {
+                'Minus': '-', 'Equal': '=', 'BracketLeft': '[', 'BracketRight': ']',
+                'Backslash': '\\', 'Semicolon': ';', 'Quote': "'",
+                'Backquote': '`', 'Comma': ',', 'Period': '.', 'Slash': '/'
+            };
+            if (unshiftedSymbols[code]) return unshiftedSymbols[code].codePointAt(0);
+            if (event.key.length > 0) return event.key.codePointAt(0) || 0;
+            return 0;
+        }
+
+        function encodeKeyEvent(event, action) {
+            const eventPtrPtr = wasmInstance.exports.ghostty_wasm_alloc_opaque();
+            const result = wasmInstance.exports.ghostty_key_event_new(0, eventPtrPtr);
+            if (result !== GHOSTTY_SUCCESS) {
+                wasmInstance.exports.ghostty_wasm_free_opaque(eventPtrPtr);
+                return null;
+            }
+            const eventPtr = readU32(eventPtrPtr);
+            wasmInstance.exports.ghostty_wasm_free_opaque(eventPtrPtr);
+
+            let utf8Ptr = 0;
+            let utf8Len = 0;
+            try {
+                wasmInstance.exports.ghostty_key_event_set_action(eventPtr, action);
+                wasmInstance.exports.ghostty_key_event_set_key(eventPtr, keyCodeMap[event.code] || 0);
+
+                let mods = 0;
+                if (event.shiftKey) {
+                    mods |= 0x01;
+                    if (event.code === 'ShiftRight') mods |= 0x40;
+                }
+                if (event.ctrlKey) {
+                    mods |= 0x02;
+                    if (event.code === 'ControlRight') mods |= 0x80;
+                }
+                if (event.altKey) {
+                    mods |= 0x04;
+                    if (event.code === 'AltRight') mods |= 0x100;
+                }
+                if (event.metaKey) {
+                    mods |= 0x08;
+                    if (event.code === 'MetaRight') mods |= 0x200;
+                }
+                if (event.getModifierState && event.getModifierState('CapsLock')) mods |= 0x10;
+                wasmInstance.exports.ghostty_key_event_set_mods(eventPtr, mods);
+
+                if (event.key.length === 1 && action !== GHOSTTY_KEY_ACTION_RELEASE) {
+                    const utf8Bytes = new TextEncoder().encode(event.key);
+                    utf8Len = utf8Bytes.length;
+                    utf8Ptr = allocBytes(utf8Len);
+                    new Uint8Array(getBuffer()).set(utf8Bytes, utf8Ptr);
+                    wasmInstance.exports.ghostty_key_event_set_utf8(eventPtr, utf8Ptr, utf8Len);
+                }
+
+                const unshifted = getUnshiftedCodepoint(event);
+                if (unshifted !== 0) {
+                    wasmInstance.exports.ghostty_key_event_set_unshifted_codepoint(eventPtr, unshifted);
+                }
+
+                const requiredPtr = wasmInstance.exports.ghostty_wasm_alloc_usize();
+                wasmInstance.exports.ghostty_key_encoder_encode(
+                    encoderPtr, eventPtr, 0, 0, requiredPtr
+                );
+                const required = readU32(requiredPtr);
+                const bufPtr = allocBytes(required || 1);
+                const writtenPtr = wasmInstance.exports.ghostty_wasm_alloc_usize();
+                const encodeResult = wasmInstance.exports.ghostty_key_encoder_encode(
+                    encoderPtr, eventPtr, bufPtr, required, writtenPtr
+                );
+
+                let encoded = null;
+                if (encodeResult === GHOSTTY_SUCCESS) {
+                    const written = readU32(writtenPtr);
+                    encoded = new Uint8Array(getBuffer()).slice(bufPtr, bufPtr + written);
+                }
+
+                wasmInstance.exports.ghostty_wasm_free_usize(requiredPtr);
+                wasmInstance.exports.ghostty_wasm_free_usize(writtenPtr);
+                freeBytes(bufPtr, required || 1);
+                return encoded;
+            } finally {
+                if (utf8Ptr) freeBytes(utf8Ptr, utf8Len);
+                wasmInstance.exports.ghostty_key_event_free(eventPtr);
+            }
+        }
+
+        function encodeFocus(gained) {
+            if (!getMode(MODE_FOCUS_EVENT)) return;
+            const writtenPtr = wasmInstance.exports.ghostty_wasm_alloc_usize();
+            const bufPtr = allocBytes(8);
+            const result = wasmInstance.exports.ghostty_focus_encode(
+                gained ? GHOSTTY_FOCUS_GAINED : GHOSTTY_FOCUS_LOST,
+                bufPtr, 8, writtenPtr
+            );
+            if (result === GHOSTTY_SUCCESS) {
+                sendPty(new Uint8Array(getBuffer()).slice(bufPtr, bufPtr + readU32(writtenPtr)));
+            }
+            freeBytes(bufPtr, 8);
+            wasmInstance.exports.ghostty_wasm_free_usize(writtenPtr);
+        }
+
+        function selectedText() {
+            const sel = document.getSelection();
+            if (!sel || sel.isCollapsed) return '';
+            const screen = document.getElementById('screen');
+            if (!screen.contains(sel.anchorNode) && !screen.contains(sel.focusNode)) return '';
+            return sel.toString();
+        }
+
+        async function copySelection() {
+            const text = selectedText();
+            if (!text) return false;
+            try {
+                await navigator.clipboard.writeText(text);
+                return true;
+            } catch {
+                return false;
+            }
+        }
+
+        function pasteBytes(text) {
+            const encoder = new TextEncoder();
+            const src = encoder.encode(text);
+            const dataPtr = allocBytes(src.length || 1);
+            new Uint8Array(getBuffer()).set(src, dataPtr);
+            const safe = wasmInstance.exports.ghostty_paste_is_safe(dataPtr, src.length);
+            if (!safe) {
+                const ok = window.confirm(
+                    'This paste contains newlines or a bracketed-paste terminator.\nPaste anyway?'
+                );
+                if (!ok) {
+                    freeBytes(dataPtr, src.length || 1);
+                    return;
+                }
+            }
+            const bracketed = getMode(MODE_BRACKETED_PASTE);
+            const writtenPtr = wasmInstance.exports.ghostty_wasm_alloc_usize();
+            let result = wasmInstance.exports.ghostty_paste_encode(
+                dataPtr, src.length, bracketed ? 1 : 0, 0, 0, writtenPtr
+            );
+            let needed = readU32(writtenPtr);
+            if (result === GHOSTTY_OUT_OF_SPACE || needed === 0) {
+                needed = Math.max(needed, src.length + 16);
+            }
+            const outPtr = allocBytes(needed);
+            result = wasmInstance.exports.ghostty_paste_encode(
+                dataPtr, src.length, bracketed ? 1 : 0, outPtr, needed, writtenPtr
+            );
+            if (result === GHOSTTY_SUCCESS) {
+                sendPty(new Uint8Array(getBuffer()).slice(outPtr, outPtr + readU32(writtenPtr)));
+            }
+            freeBytes(outPtr, needed);
+            freeBytes(dataPtr, src.length || 1);
+            wasmInstance.exports.ghostty_wasm_free_usize(writtenPtr);
+        }
+
+        async function pasteFromClipboard() {
+            let text = '';
+            try {
+                text = await navigator.clipboard.readText();
+            } catch {
+                return false;
+            }
+            if (text) pasteBytes(text);
+            return true;
+        }
+
+        function isCopyChord(event) {
+            const key = event.key.toLowerCase();
+            if (key !== 'c') return false;
+            if (isMac) return event.metaKey && !event.ctrlKey && !event.altKey;
+            return event.ctrlKey && event.shiftKey;
+        }
+
+        function isPasteChord(event) {
+            const key = event.key.toLowerCase();
+            if (key !== 'v') return false;
+            if (isMac) return event.metaKey && !event.ctrlKey && !event.altKey;
+            return event.ctrlKey && event.shiftKey;
+        }
+
+        function isSelectAllChord(event) {
+            if (event.key.toLowerCase() !== 'a') return false;
+            if (isMac) return event.metaKey && !event.ctrlKey && !event.altKey;
+            return event.ctrlKey && event.shiftKey;
+        }
+
+        function isFontChord(event) {
+            const superLike = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey;
+            if (!superLike || event.altKey) return null;
+            if (event.key === '=' || event.key === '+') return 'inc';
+            if (event.key === '-') return 'dec';
+            if (event.key === '0') return 'reset';
+            return null;
+        }
+
+        function applyFontSize(next) {
+            fontSize = Math.max(8, Math.min(32, next));
+            document.documentElement.style.setProperty('--font-size', `${fontSize}px`);
+            measureCells();
+            resizeToFit();
+        }
+
+        function measureCells() {
+            const probe = document.createElement('span');
+            probe.textContent = 'M'.repeat(80);
+            probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;';
+            const wrap = document.getElementById('screen-wrap');
+            wrap.appendChild(probe);
+            const rect = probe.getBoundingClientRect();
+            cellW = rect.width / 80 || 8;
+            cellH = rect.height || fontSize * 1.35;
+            wrap.removeChild(probe);
+            const root = document.documentElement.style;
+            root.setProperty('--cell-w', `${cellW}px`);
+            root.setProperty('--cell-h', `${cellH}px`);
+        }
+
+        function resizeToFit() {
+            const wrap = document.getElementById('screen-wrap');
+            const width = wrap.clientWidth - 16;
+            const height = wrap.clientHeight - 16;
+            const nextCols = Math.max(20, Math.floor(width / cellW));
+            const nextRows = Math.max(8, Math.floor(height / cellH));
+            if (nextCols === cols && nextRows === rows) {
+                document.documentElement.style.setProperty('--cols', String(cols));
+                document.documentElement.style.setProperty('--rows', String(rows));
+                return;
+            }
+            cols = nextCols;
+            rows = nextRows;
+            document.documentElement.style.setProperty('--cols', String(cols));
+            document.documentElement.style.setProperty('--rows', String(rows));
+            if (termPtr && wasmInstance.exports.ghostty_terminal_resize) {
+                wasmInstance.exports.ghostty_terminal_resize(
+                    termPtr, cols, rows, Math.round(cellW), Math.round(cellH)
+                );
+            }
+            updateMouseEncoderSize();
+            sendResize();
+            scheduleRender();
+        }
+
+        function connectWs() {
+            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${proto}//${location.host}/ws`);
+            ws.binaryType = 'arraybuffer';
+            ws.onopen = () => sendResize();
+            ws.onclose = () => {
+                document.getElementById('title').textContent = 'Disconnected';
+            };
+            ws.onmessage = (ev) => {
+                const bytes = ev.data instanceof ArrayBuffer
+                    ? new Uint8Array(ev.data)
+                    : new TextEncoder().encode(String(ev.data));
+                writeVt(bytes);
+            };
+        }
+
+        function jumpToLiveIfNeeded() {
+            if (!isViewportActive()) {
+                scrollViewport(GHOSTTY_SCROLL_VIEWPORT_BOTTOM);
+            }
+        }
+
+        function handleKeyDown(event) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            if (event.isComposing || event.key === 'Process') return;
+            if (event.key === 'F5' || (event.metaKey && event.key === 'r' && !event.ctrlKey)) return;
+
+            const fontChord = isFontChord(event);
+            if (fontChord) {
+                event.preventDefault();
+                if (fontChord === 'inc') applyFontSize(fontSize + 1);
+                else if (fontChord === 'dec') applyFontSize(fontSize - 1);
+                else applyFontSize(13);
+                return;
+            }
+
+            if (isCopyChord(event)) {
+                if (selectedText()) {
+                    event.preventDefault();
+                    copySelection();
+                }
+                return;
+            }
+
+            if (isPasteChord(event)) {
+                event.preventDefault();
+                jumpToLiveIfNeeded();
+                pasteFromClipboard();
+                return;
+            }
+
+            if (isSelectAllChord(event)) {
+                event.preventDefault();
+                const range = document.createRange();
+                range.selectNodeContents(document.getElementById('screen'));
+                const sel = document.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+                return;
+            }
+
+            event.preventDefault();
+            jumpToLiveIfNeeded();
+            const action = event.repeat ? GHOSTTY_KEY_ACTION_REPEAT : GHOSTTY_KEY_ACTION_PRESS;
+            sendPty(encodeKeyEvent(event, action));
+        }
+
+        function handleKeyUp(event) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            if (event.isComposing) return;
+            if (isCopyChord(event) || isPasteChord(event) || isSelectAllChord(event)) return;
+            if (isFontChord(event)) return;
+            sendPty(encodeKeyEvent(event, GHOSTTY_KEY_ACTION_RELEASE));
+        }
+
+        function mousePosFromEvent(event) {
+            const wrap = document.getElementById('screen-wrap');
+            const rect = wrap.getBoundingClientRect();
+            return {
+                x: event.clientX - rect.left - 8,
+                y: event.clientY - rect.top - 8,
+            };
+        }
+
+        function encodeMouse(action, button, event) {
+            if (!mouseEncoderPtr || !mouseEventPtr) return;
+            wasmInstance.exports.ghostty_mouse_event_set_action(mouseEventPtr, action);
+            if (button) {
+                wasmInstance.exports.ghostty_mouse_event_set_button(mouseEventPtr, button);
+            } else if (wasmInstance.exports.ghostty_mouse_event_clear_button) {
+                wasmInstance.exports.ghostty_mouse_event_clear_button(mouseEventPtr);
+            }
+            let mods = 0;
+            if (event.shiftKey) mods |= 0x01;
+            if (event.ctrlKey) mods |= 0x02;
+            if (event.altKey) mods |= 0x04;
+            if (event.metaKey) mods |= 0x08;
+            wasmInstance.exports.ghostty_mouse_event_set_mods(mouseEventPtr, mods);
+            const pos = mousePosFromEvent(event);
+            try {
+                wasmInstance.exports.ghostty_mouse_event_set_position(mouseEventPtr, pos.x, pos.y);
+            } catch {
+                return;
+            }
+            const writtenPtr = wasmInstance.exports.ghostty_wasm_alloc_usize();
+            const bufPtr = allocBytes(64);
+            const result = wasmInstance.exports.ghostty_mouse_encoder_encode(
+                mouseEncoderPtr, mouseEventPtr, bufPtr, 64, writtenPtr
+            );
+            if (result === GHOSTTY_SUCCESS) {
+                const written = readU32(writtenPtr);
+                if (written) sendPty(new Uint8Array(getBuffer()).slice(bufPtr, bufPtr + written));
+            }
+            freeBytes(bufPtr, 64);
+            wasmInstance.exports.ghostty_wasm_free_usize(writtenPtr);
+        }
+
+        function mouseButton(event) {
+            if (event.button === 0) return GHOSTTY_MOUSE_BUTTON_LEFT;
+            if (event.button === 1) return GHOSTTY_MOUSE_BUTTON_MIDDLE;
+            if (event.button === 2) return GHOSTTY_MOUSE_BUTTON_RIGHT;
+            return 0;
+        }
+
+        function handleWheel(event) {
+            if (!termPtr) return;
+            event.preventDefault();
+            if (mouseTracking && !event.shiftKey) {
+                encodeMouse(
+                    GHOSTTY_MOUSE_ACTION_PRESS,
+                    event.deltaY < 0 ? GHOSTTY_MOUSE_BUTTON_FOUR : GHOSTTY_MOUSE_BUTTON_FIVE,
+                    event
+                );
+                return;
+            }
+            const lines = Math.max(1, Math.round(Math.abs(event.deltaY) / 40));
+            scrollViewport(GHOSTTY_SCROLL_VIEWPORT_DELTA, event.deltaY < 0 ? -lines : lines);
+            renderScreen();
+        }
+
+        function setupScrollbar() {
+            const track = document.getElementById('scrollbar');
+            const thumb = document.getElementById('scrollbar-thumb');
+            track.addEventListener('mousedown', (event) => {
+                if (!termPtr) return;
+                if (event.target === thumb) {
+                    const thumbRect = thumb.getBoundingClientRect();
+                    scrollbarDrag = {
+                        anchor: (event.clientY - thumbRect.top) / Math.max(thumbRect.height, 1)
+                    };
+                    thumb.classList.add('dragging');
+                    event.preventDefault();
+                    return;
+                }
+                scrollToOffsetFromTrackY(event.clientY, 0.5);
+                event.preventDefault();
+            });
+            window.addEventListener('mousemove', (event) => {
+                if (!scrollbarDrag) return;
+                scrollToOffsetFromTrackY(event.clientY, scrollbarDrag.anchor);
+            });
+            window.addEventListener('mouseup', () => {
+                if (!scrollbarDrag) return;
+                scrollbarDrag = null;
+                thumb.classList.remove('dragging');
+            });
+            track.addEventListener('wheel', handleWheel, { passive: false });
+        }
+
+        async function init() {
+            const screen = document.getElementById('screen');
+            const wrap = document.getElementById('screen-wrap');
+            try {
+                await loadWasm();
+                createTerminal();
+                createEncoder();
+                createMouseEncoder();
+                await installEffects();
+                setupScrollbar();
+                measureCells();
+                resizeToFit();
+                renderScreen();
+                connectWs();
+
+                screen.addEventListener('keydown', handleKeyDown);
+                screen.addEventListener('keyup', handleKeyUp);
+                screen.addEventListener('focus', () => encodeFocus(true));
+                screen.addEventListener('blur', () => encodeFocus(false));
+                wrap.addEventListener('wheel', handleWheel, { passive: false });
+                wrap.addEventListener('mousedown', (event) => {
+                    screen.focus();
+                    if (event.button === 1) {
+                        event.preventDefault();
+                        pasteFromClipboard();
+                        return;
+                    }
+                    if (mouseTracking && !event.shiftKey) {
+                        event.preventDefault();
+                        mousePressed = true;
+                        encodeMouse(GHOSTTY_MOUSE_ACTION_PRESS, mouseButton(event), event);
+                    }
+                });
+                window.addEventListener('mousemove', (event) => {
+                    if (!mouseTracking || !mousePressed) return;
+                    encodeMouse(GHOSTTY_MOUSE_ACTION_MOTION, mouseButton(event), event);
+                });
+                window.addEventListener('mouseup', (event) => {
+                    if (!mouseTracking || !mousePressed) return;
+                    mousePressed = false;
+                    encodeMouse(GHOSTTY_MOUSE_ACTION_RELEASE, mouseButton(event), event);
+                });
+                screen.addEventListener('paste', (event) => {
+                    event.preventDefault();
+                    const text = event.clipboardData && event.clipboardData.getData('text/plain');
+                    if (text) pasteBytes(text);
+                });
+                screen.addEventListener('copy', (event) => {
+                    const text = selectedText();
+                    if (!text) return;
+                    event.preventDefault();
+                    event.clipboardData.setData('text/plain', text);
+                });
+                screen.addEventListener('compositionend', (event) => {
+                    if (event.data) pasteBytes(event.data);
+                });
+                new ResizeObserver(() => {
+                    measureCells();
+                    resizeToFit();
+                }).observe(wrap);
+                screen.focus();
+            } catch (e) {
+                console.error(e);
+                document.getElementById('window').classList.add('error');
+                document.getElementById('boot-error').textContent = e.stack || String(e);
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
