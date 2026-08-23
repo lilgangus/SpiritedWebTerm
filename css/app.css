@@ -194,6 +194,38 @@ body {
 
 #bell.on { opacity: 1; }
 
+#session-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(16, 16, 18, 0.55);
+}
+
+#session-overlay.hidden { display: none; }
+
+#open-session {
+    appearance: none;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 8px;
+    padding: 10px 18px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.92);
+    font: 590 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    cursor: pointer;
+}
+
+#open-session:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+#open-session:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
 #boot-error {
     display: none;
     margin: 16px;

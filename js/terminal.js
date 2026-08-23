@@ -76,6 +76,13 @@ export class Terminal {
         this.syncEncoders();
     }
 
+    reset() {
+        if (!this.ptr || !this.wasm.exports.ghostty_terminal_reset) return;
+        this.wasm.exports.ghostty_terminal_reset(this.ptr);
+        this.#applyTheme();
+        this.syncEncoders();
+    }
+
     syncEncoders() {
         if (this.keyEncoder) {
             this.wasm.exports.ghostty_key_encoder_setopt_from_terminal(this.keyEncoder, this.ptr);

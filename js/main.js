@@ -12,25 +12,43 @@ async function main() {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     const pty = new Pty(`${proto}//${location.host}/ws`);
     const ui = new Chrome({ term, pty });
+    let hadSession = false;
 
     await term.installEffects({
         onWritePty: (bytes) => pty.send(bytes),
         onBell: () => ui.flashBell(),
-        onTitle: () => ui.updateTitle(),
+        onTitle: () => {
+            if (pty.open) ui.updateTitle();
+        },
     });
 
     ui.bindScrollbar();
     ui.measureCells();
     ui.resizeToFit();
+    ui.setDisconnected(true, false);
     ui.render();
 
-    pty.onOpen(() => pty.resize(ui.cols, ui.rows));
+    pty.onOpen(() => {
+        hadSession = true;
+        term.reset();
+        pty.resize(ui.cols, ui.rows);
+        ui.setDisconnected(false);
+        ui.render();
+        ui.screen.focus();
+    });
     pty.onClose(() => {
-        document.getElementById("title").textContent = "Disconnected";
+        ui.setDisconnected(true, hadSession);
+        ui.render();
     });
     pty.onData((bytes) => {
         term.write(bytes);
         ui.render();
+    });
+
+    ui.openButton.addEventListener("click", () => {
+        if (pty.open || pty.connecting) return;
+        ui.openButton.disabled = true;
+        pty.connect();
     });
 
     bindInput({
@@ -45,8 +63,6 @@ async function main() {
         ui.measureCells();
         ui.resizeToFit();
     }).observe(ui.wrap);
-
-    ui.screen.focus();
 }
 
 main().catch((err) => {

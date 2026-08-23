@@ -21,6 +21,22 @@ export class Chrome {
         this.thumb = document.getElementById("thumb");
         this.track = document.getElementById("scrollbar");
         this.paletteStyle = document.getElementById("vt-palette");
+        this.overlay = document.getElementById("session-overlay");
+        this.openButton = document.getElementById("open-session");
+    }
+
+    setDisconnected(disconnected, hadSession = false) {
+        this.overlay.classList.toggle("hidden", !disconnected);
+        this.openButton.textContent = hadSession ? "New Terminal" : "Open Terminal";
+        if (disconnected) {
+            this.cursorEl.classList.remove("visible");
+            const label = hadSession ? "Disconnected" : "Ghostty";
+            document.getElementById("tab").textContent = label;
+            document.getElementById("title").textContent = label;
+            document.title = label;
+            this.openButton.disabled = false;
+            this.openButton.focus();
+        }
     }
 
     jumpToLive() {
@@ -146,8 +162,12 @@ export class Chrome {
             try {
                 this.applyHtml(this.term.formatHtml());
                 this.updateColors();
-                this.updateTitle();
-                this.updateCursor(this.term.cursor());
+                if (this.pty.open) {
+                    this.updateTitle();
+                    this.updateCursor(this.term.cursor());
+                } else {
+                    this.cursorEl.classList.remove("visible");
+                }
                 this.updateScrollbar(this.term.scrollbar());
             } catch (err) {
                 console.error(err);
