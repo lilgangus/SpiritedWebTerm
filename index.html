@@ -959,7 +959,10 @@
                 if (event.altKey) { mods |= 0x04; if (event.code === 'AltRight') mods |= 0x100; }
                 if (event.metaKey) { mods |= 0x08; if (event.code === 'MetaRight') mods |= 0x200; }
                 wasmInstance.exports.ghostty_key_event_set_mods(eventPtr, mods);
-                if (event.key.length === 1 && action !== GHOSTTY_KEY_ACTION_RELEASE) {
+                // Browsers often set key to a C0 byte for Ctrl+C (etc.). Passing
+                // that as UTF-8 makes the encoder emit CSI u instead of 0x03.
+                const keyCp = event.key.length === 1 ? event.key.codePointAt(0) : 0;
+                if (keyCp >= 0x20 && keyCp !== 0x7f && action !== GHOSTTY_KEY_ACTION_RELEASE) {
                     const utf8Bytes = new TextEncoder().encode(event.key);
                     utf8Len = utf8Bytes.length;
                     utf8Ptr = allocBytes(utf8Len);

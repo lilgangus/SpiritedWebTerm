@@ -42,34 +42,24 @@ def set_winsize(fd: int, rows: int, cols: int) -> None:
 
 def spawn_shell(cols: int, rows: int) -> tuple[int, int]:
     """Fork a login-ish shell in a PTY. Returns (pid, master_fd)."""
-    master, slave = pty.openpty()
-    set_winsize(slave, rows, cols)
-    set_winsize(master, rows, cols)
-
-    pid = os.fork()
+    # pty.fork() attaches a controlling TTY so Ctrl+C (0x03) can SIGINT
+    # the foreground process group, not just the shell prompt.
+    pid, master = pty.fork()
     if pid == 0:
         try:
-            os.close(master)
-            os.setsid()
-            os.dup2(slave, 0)
-            os.dup2(slave, 1)
-            os.dup2(slave, 2)
-            if slave > 2:
-                os.close(slave)
-
+            set_winsize(0, rows, cols)
             env = os.environ.copy()
             env["TERM"] = "xterm-256color"
             env["COLORTERM"] = "truecolor"
             env["COLUMNS"] = str(cols)
             env["LINES"] = str(rows)
-            # Minimal interactive shell; -l gives a login shell when possible.
             argv = [SHELL, "-l"] if os.path.basename(SHELL) in ("bash", "zsh") else [SHELL]
             os.execvpe(argv[0], argv, env)
         except Exception as exc:  # pragma: no cover
             sys.stderr.write(f"exec failed: {exc}\n")
             os._exit(127)
 
-    os.close(slave)
+    set_winsize(master, rows, cols)
     return pid, master
 
 
