@@ -231,15 +231,34 @@ class Handler(BaseHTTPRequestHandler):
         bridge_pty(conn, COLS, ROWS)
 
     def _serve_static(self, path: str) -> None:
-        if path in ("/", "/index.html"):
-            file_path = HERE / "index.html"
-            content_type = "text/html; charset=utf-8"
-        elif path == "/ghostty-vt.wasm":
+        mime = {
+            ".html": "text/html; charset=utf-8",
+            ".js": "text/javascript; charset=utf-8",
+            ".css": "text/css; charset=utf-8",
+            ".md": "text/markdown; charset=utf-8",
+            ".wasm": "application/wasm",
+        }
+
+        if path == "/ghostty-vt.wasm":
             file_path = WASM_PATH
             content_type = "application/wasm"
         else:
-            self.send_error(404)
-            return
+            rel = "index.html" if path in ("/", "/index.html") else path.lstrip("/")
+            parts = Path(rel).parts
+            if not parts or any(p.startswith(".") or p == ".." for p in parts):
+                self.send_error(404)
+                return
+            candidate = (HERE / rel).resolve()
+            try:
+                candidate.relative_to(HERE.resolve())
+            except ValueError:
+                self.send_error(404)
+                return
+            content_type = mime.get(candidate.suffix.lower())
+            if content_type is None:
+                self.send_error(404)
+                return
+            file_path = candidate
 
         if not file_path.is_file():
             self.send_error(404, f"Missing {file_path.name}. Build wasm first if needed.")

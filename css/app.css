@@ -1,0 +1,209 @@
+:root {
+    --bg: #282c34;
+    --fg: #ffffff;
+    --cursor: #ffffff;
+    --cell-w: 8px;
+    --cell-h: 17px;
+    --cols: 80;
+    --rows: 24;
+    --pad-x: 8px;
+    --pad-y: 8px;
+    --font-size: 13px;
+}
+
+html, body {
+    margin: 0;
+    height: 100%;
+    background: #161618;
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+}
+
+body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#desktop {
+    width: min(1100px, calc(100vw - 48px));
+    height: min(720px, calc(100vh - 48px));
+}
+
+#window {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    border-radius: 10px;
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.08),
+        0 24px 80px rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+}
+
+#titlebar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 38px;
+    padding: 0 12px;
+    flex: 0 0 38px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.045), transparent);
+    user-select: none;
+}
+
+#traffic {
+    display: flex;
+    gap: 8px;
+}
+
+#traffic span {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+
+#traffic .close { background: #ff5f57; }
+#traffic .min { background: #febc2e; }
+#traffic .max { background: #28c840; }
+
+#tab {
+    height: 26px;
+    max-width: 46%;
+    padding: 0 12px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 12px;
+    line-height: 26px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#title {
+    flex: 1;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 590;
+    color: rgba(255, 255, 255, 0.72);
+}
+
+#term {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    position: relative;
+    background: var(--bg);
+}
+
+#screen-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    padding: var(--pad-y) var(--pad-x);
+    overflow: hidden;
+    font-family: "JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: var(--font-size);
+    line-height: var(--cell-h);
+    font-feature-settings: "calt" 0, "liga" 0;
+    cursor: text;
+}
+
+#screen-wrap:focus, #screen:focus { outline: none; }
+
+#screen {
+    margin: 0;
+    padding: 0;
+    width: calc(var(--cols) * var(--cell-w));
+    height: calc(var(--rows) * var(--cell-h));
+    color: var(--fg);
+    background: var(--bg);
+    overflow: hidden;
+    tab-size: 8;
+    caret-color: transparent;
+}
+
+#screen, #screen * {
+    font-family: inherit !important;
+    font-size: inherit !important;
+    line-height: inherit !important;
+}
+
+#screen > div {
+    margin: 0;
+    white-space: pre;
+}
+
+#screen ::selection, #screen-wrap ::selection {
+    background: var(--fg);
+    color: var(--bg);
+}
+
+#cursor {
+    position: absolute;
+    left: var(--pad-x);
+    top: var(--pad-y);
+    width: var(--cell-w);
+    height: var(--cell-h);
+    background: var(--cursor);
+    pointer-events: none;
+    display: none;
+    z-index: 2;
+    box-sizing: border-box;
+    mix-blend-mode: difference;
+}
+
+#cursor.visible { display: block; }
+#cursor.blink { animation: cursor-blink 1.06s step-end infinite; }
+#cursor.blink-reset { animation: none; }
+
+@keyframes cursor-blink {
+    50% { background: transparent; }
+}
+
+#scrollbar {
+    position: relative;
+    width: 11px;
+    flex: 0 0 11px;
+    cursor: pointer;
+    user-select: none;
+}
+
+#thumb {
+    position: absolute;
+    left: 3px;
+    right: 2px;
+    top: 0;
+    min-height: 18px;
+    background: rgba(255, 255, 255, 0.28);
+    border-radius: 4px;
+}
+
+#thumb:hover, #thumb.dragging { background: rgba(255, 255, 255, 0.45); }
+
+#bell {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: rgba(255, 255, 255, 0.12);
+    opacity: 0;
+    z-index: 3;
+}
+
+#bell.on { opacity: 1; }
+
+#boot-error {
+    display: none;
+    margin: 16px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: #3b1d1d;
+    color: #ffb4b4;
+    font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre-wrap;
+}
+
+#window.error #boot-error { display: block; }
+#window.error #term { display: none; }
