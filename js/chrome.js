@@ -2,6 +2,8 @@ import * as C from "./constants.js";
 
 let nextScreenId = 1;
 
+import { urlAtColumn } from "./url.js";
+
 /** Pane chrome: screen HTML, cursor, scrollbar, title, bell, cell metrics. */
 export class Chrome {
     constructor({ term, pty, pane, windowEl, tabEl }) {
@@ -36,6 +38,8 @@ export class Chrome {
         this.viewButton = pane.querySelector(".view-session");
         this.closeButton = pane.querySelector(".close-session");
         this.bellEl = pane.querySelector(".bell");
+        this.urlHover = pane.querySelector(".url-hover");
+        this.search = null;
         this.tabLabel = tabEl.querySelector(".tab-label");
         this.titleEl = windowEl.querySelector(".win-title");
 
@@ -146,6 +150,63 @@ export class Chrome {
     mousePos(event) {
         const rect = this.wrap.getBoundingClientRect();
         return { x: event.clientX - rect.left - 8, y: event.clientY - rect.top - 8 };
+    }
+
+    cellAt(event) {
+        const pos = this.mousePos(event);
+        if (pos.x < 0 || pos.y < 0) return null;
+        const x = Math.floor(pos.x / this.cellW);
+        const y = Math.floor(pos.y / this.cellH);
+        if (x < 0 || x >= this.cols || y < 0 || y >= this.rows) return null;
+        return { x, y };
+    }
+
+    /** @returns {{ url: string, x: number, y: number, len: number } | null} */
+    urlAt(event) {
+        if (event.target.closest(".search-overlay")) return null;
+        const link = event.target.closest("a[href]");
+        if (link && this.screen.contains(link)) {
+            const href = link.getAttribute("href");
+            if (!href) return null;
+            // OSC 8 links underline via CSS :hover; still report the URL for click.
+            return { url: href, x: 0, y: 0, len: 0, osc8: true };
+        }
+        const cell = this.cellAt(event);
+        if (!cell) return null;
+        const row = this.screen.querySelectorAll(".row")[cell.y];
+        if (!row) return null;
+        const match = urlAtColumn(row.textContent, cell.x);
+        if (!match) return null;
+        return { url: match.url, x: match.x, y: cell.y, len: match.len };
+    }
+
+    clearUrlHover() {
+        this.wrap.style.cursor = "";
+        if (this.urlHover) {
+            this.urlHover.hidden = true;
+        }
+    }
+
+    updateLinkCursor(event) {
+        if (event.target.closest(".search-overlay")) {
+            this.clearUrlHover();
+            return;
+        }
+        const hit = this.urlAt(event);
+        if (!hit) {
+            this.clearUrlHover();
+            return;
+        }
+        this.wrap.style.cursor = "pointer";
+        // Plain-text URLs need a drawn underline; OSC 8 uses CSS :hover on <a>.
+        if (hit.osc8 || !this.urlHover) {
+            this.urlHover.hidden = true;
+            return;
+        }
+        this.urlHover.hidden = false;
+        this.urlHover.style.left = `calc(var(--pad-x) + ${hit.x * this.cellW}px)`;
+        this.urlHover.style.top = `calc(var(--pad-y) + ${(hit.y + 1) * this.cellH - 2}px)`;
+        this.urlHover.style.width = `${Math.max(1, hit.len) * this.cellW}px`;
     }
 
     measureCells() {
@@ -310,6 +371,7 @@ export class Chrome {
                     if (this.readonly) this.updateTitle();
                 }
                 this.updateScrollbar(this.term.scrollbar());
+                this.search?.updateHighlights(this.cellW, this.cellH);
             } catch (err) {
                 console.error(err);
             }

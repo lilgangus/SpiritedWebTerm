@@ -64,8 +64,21 @@
         <div class="pane">
             <div class="screen-wrap">
                 <div class="screen" tabindex="0" role="application" aria-label="Terminal"></div>
+                <div class="search-highlights" aria-hidden="true"></div>
+                <div class="url-hover" aria-hidden="true" hidden></div>
                 <div class="cursor" aria-hidden="true"></div>
                 <div class="bell" aria-hidden="true"></div>
+                <div class="search-overlay hidden">
+                    <div class="search-bar">
+                        <div class="search-field-wrap">
+                            <input type="text" class="search-input" placeholder="Search" spellcheck="false" autocomplete="off" aria-label="Search">
+                            <span class="search-count" aria-live="polite"></span>
+                        </div>
+                        <button type="button" class="search-prev" title="Next match (⌘G)" aria-label="Next match">↑</button>
+                        <button type="button" class="search-next" title="Previous match (⌘⇧G)" aria-label="Previous match">↓</button>
+                        <button type="button" class="search-close" title="Close (Esc)" aria-label="Close search">×</button>
+                    </div>
+                </div>
             </div>
             <div class="scrollbar" title="Scrollback" aria-label="Scrollback" role="scrollbar">
                 <div class="thumb"></div>

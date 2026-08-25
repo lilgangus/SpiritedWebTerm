@@ -1,5 +1,6 @@
 import * as C from "./constants.js";
 import { KEY_CODES } from "./keymap.js";
+import { openUrl } from "./url.js";
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
@@ -55,10 +56,13 @@ function mouseMods(event) {
 
 /**
  * Bind keyboard, clipboard, focus, mouse, and wheel to a terminal + PTY.
- * `ui` must expose followLive, jumpToLive(), render(), onFontChord(), mousePos().
+ * `ui` must expose followLive, jumpToLive(), render(), onFontChord(), mousePos(),
+ * and optional search.handleChord().
  */
 export function bindInput({ term, pty, screen, wrap, ui }) {
     let mouseDown = false;
+    let clickDown = null;
+    let clickDragged = false;
 
     function isLive() {
         return pty.open && !ui.readonly;
@@ -75,17 +79,28 @@ export function bindInput({ term, pty, screen, wrap, ui }) {
         if (!isLive()) return;
         try {
             const text = await navigator.clipboard.readText();
-            if (text) {
-                ui.jumpToLive();
-                const bytes = term.encodePaste(text);
-                if (bytes) pty.send(bytes);
-            }
+            if (text) pasteText(text);
         } catch { /* clipboard permission denied */ }
+    }
+
+    function pasteText(text) {
+        if (!isLive() || !text) return;
+        ui.jumpToLive();
+        const bytes = term.encodePaste(text);
+        if (bytes) pty.send(bytes);
     }
 
     screen.addEventListener("keydown", (event) => {
         if (event.isComposing || event.key === "Process") return;
         if (event.key === "F5" || (event.metaKey && event.key === "r" && !event.ctrlKey)) return;
+
+        if (ui.search?.handleChord(event)) return;
+
+        if (event.key === "Escape" && ui.search?.isOpen()) {
+            event.preventDefault();
+            ui.search.close();
+            return;
+        }
 
         const fontChord = isFontChord(event);
         if (fontChord) {
@@ -110,8 +125,10 @@ export function bindInput({ term, pty, screen, wrap, ui }) {
         }
         if (!isLive()) return;
         if (isPasteChord(event)) {
-            event.preventDefault();
-            pasteFromClipboard();
+            // Do not preventDefault and do not call clipboard.readText().
+            // Letting the browser fire a native `paste` event delivers
+            // clipboardData without the Async Clipboard API permission
+            // prompt that appears for content copied outside this page.
             return;
         }
 
@@ -160,6 +177,23 @@ export function bindInput({ term, pty, screen, wrap, ui }) {
         ui.render();
     }, { passive: false });
 
+    wrap.addEventListener("click", (event) => {
+        const link = event.target.closest("a[href]");
+        if (link && screen.contains(link)) event.preventDefault();
+    }, true);
+
+    wrap.addEventListener("mousemove", (event) => {
+        ui.updateLinkCursor(event);
+        if (clickDown && !clickDragged) {
+            const dx = event.clientX - clickDown.x;
+            const dy = event.clientY - clickDown.y;
+            if (dx * dx + dy * dy > 9) clickDragged = true;
+        }
+    });
+    wrap.addEventListener("mouseleave", () => {
+        ui.clearUrlHover();
+    });
+
     wrap.addEventListener("mousedown", (event) => {
         screen.focus();
         if (event.button === 1) {
@@ -174,7 +208,11 @@ export function bindInput({ term, pty, screen, wrap, ui }) {
             sendMouse(C.MOUSE_PRESS, mouseButton(event), event);
             return;
         }
-        if (event.button === 0) ui.beginSelecting();
+        if (event.button === 0) {
+            clickDown = { x: event.clientX, y: event.clientY };
+            clickDragged = false;
+            ui.beginSelecting();
+        }
     });
 
     window.addEventListener("mousemove", (event) => {
@@ -187,6 +225,16 @@ export function bindInput({ term, pty, screen, wrap, ui }) {
             mouseDown = false;
             sendMouse(C.MOUSE_RELEASE, mouseButton(event), event);
         }
+        if (event.button === 0 && clickDown && !clickDragged) {
+            const hit = ui.urlAt(event);
+            if (hit && openUrl(hit.url)) {
+                document.getSelection()?.removeAllRanges();
+                clickDown = null;
+                ui.endSelecting();
+                return;
+            }
+        }
+        clickDown = null;
         ui.endSelecting();
     });
 
@@ -195,9 +243,7 @@ export function bindInput({ term, pty, screen, wrap, ui }) {
         if (!isLive()) return;
         const text = event.clipboardData && event.clipboardData.getData("text/plain");
         if (!text) return;
-        ui.jumpToLive();
-        const bytes = term.encodePaste(text);
-        if (bytes) pty.send(bytes);
+        pasteText(text);
     });
     screen.addEventListener("copy", (event) => {
         const text = selectedText(screen);

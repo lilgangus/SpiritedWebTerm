@@ -2,6 +2,9 @@ export const OK = 0;
 export const SUCCESS = 0;
 
 export const FORMAT_HTML = 2;
+export const FORMAT_PLAIN = 0;
+
+export const OUT_OF_SPACE = -3;
 
 export const KEY_RELEASE = 0;
 export const KEY_PRESS = 1;
@@ -9,6 +12,7 @@ export const KEY_REPEAT = 2;
 
 export const POINT_ACTIVE = 0;
 export const POINT_VIEWPORT = 1;
+export const POINT_SCREEN = 2;
 
 export const DATA_COLS = 1;
 export const DATA_ROWS = 2;

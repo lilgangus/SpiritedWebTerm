@@ -288,9 +288,65 @@ export class Terminal {
         } catch (err) {
             console.warn("viewport selection failed; formatting full screen", err);
         }
+        return this.#format(C.FORMAT_HTML, selPtr);
+    }
+
+    /** Case-insensitive scrollback search; matches are newest-first. */
+    searchNeedle(needle) {
+        if (!needle) return [];
+        const sb = this.scrollbar();
+        const totalRows = Math.max(1, sb.total);
+        let text = "";
+        try {
+            text = this.#formatPlainScreen(totalRows);
+        } catch (err) {
+            console.warn("screen search failed", err);
+            return [];
+        }
+        const lines = text.split("\n");
+        if (lines.length && lines[lines.length - 1] === "") lines.pop();
+        const needleLower = needle.toLowerCase();
+        const matches = [];
+        for (let y = 0; y < lines.length; y++) {
+            const lineLower = lines[y].toLowerCase();
+            let idx = 0;
+            while ((idx = lineLower.indexOf(needleLower, idx)) !== -1) {
+                matches.push({ x: idx, y, len: needle.length });
+                idx += needle.length;
+            }
+        }
+        matches.sort((a, b) => b.y - a.y || b.x - a.x);
+        return matches;
+    }
+
+    scrollToScreenRow(screenRow) {
+        const sb = this.scrollbar();
+        const visible = Math.min(Math.max(sb.len, 1), Math.max(sb.total, 1));
+        const maxOffset = Math.max(sb.total - visible, 0);
+        let offset = sb.offset;
+        if (screenRow < offset) offset = screenRow;
+        else if (screenRow >= offset + visible) offset = screenRow - visible + 1;
+        offset = Math.min(maxOffset, Math.max(0, offset));
+        this.scroll(C.SCROLL_ROW, offset);
+    }
+
+    #formatPlainScreen(totalRows) {
+        const wasmCols = this.cellCountData(C.DATA_COLS) || this.cols;
+        const cols = Math.max(1, Math.min(this.cols, wasmCols));
+        const rows = Math.max(1, totalRows);
+        let selPtr = 0;
+        try {
+            selPtr = this.#screenSelection(cols, rows);
+        } catch (err) {
+            console.warn("screen selection failed", err);
+        }
+        return this.#format(C.FORMAT_PLAIN, selPtr);
+    }
+
+    #format(emit, selPtr) {
         const { ptr: optsPtr, size: optsSize, view } = this.wasm.allocStruct("GhosttyFormatterTerminalOptions");
         this.wasm.setField(view, "GhosttyFormatterTerminalOptions", "size", optsSize);
-        this.wasm.setField(view, "GhosttyFormatterTerminalOptions", "emit", C.FORMAT_HTML);
+        this.wasm.setField(view, "GhosttyFormatterTerminalOptions", "emit", emit);
         this.wasm.setField(view, "GhosttyFormatterTerminalOptions", "unwrap", 0);
         this.wasm.setField(view, "GhosttyFormatterTerminalOptions", "trim", 0);
 
@@ -338,12 +394,12 @@ export class Terminal {
         }
         const outPtr = this.wasm.u32(outPtrPtr);
         const outLen = this.wasm.u32(outLenPtr);
-        const html = new TextDecoder().decode(this.wasm.bytes(outPtr, outLen));
+        const text = new TextDecoder().decode(this.wasm.bytes(outPtr, outLen));
         this.wasm.exports.ghostty_free(0, outPtr, outLen);
         this.wasm.exports.ghostty_wasm_free_opaque(outPtrPtr);
         this.wasm.exports.ghostty_wasm_free_usize(outLenPtr);
         this.wasm.exports.ghostty_formatter_free(fmtPtr);
-        return html;
+        return text;
     }
 
     #allocPoint(tag, x, y) {
@@ -380,6 +436,21 @@ export class Terminal {
         const rows = Math.max(1, Math.min(this.rows, wasmRows));
         const start = this.#gridRef(C.POINT_VIEWPORT, 0, 0);
         const end = this.#gridRef(C.POINT_VIEWPORT, cols - 1, rows - 1);
+        const { ptr, size, view } = this.wasm.allocStruct("GhosttySelection");
+        this.wasm.setU32(ptr, size);
+        const startOff = this.wasm.field("GhosttySelection", "start").offset;
+        const endOff = this.wasm.field("GhosttySelection", "end").offset;
+        this.wasm.bytes(ptr + startOff, start.size).set(this.wasm.bytes(start.ptr, start.size));
+        this.wasm.bytes(ptr + endOff, end.size).set(this.wasm.bytes(end.ptr, end.size));
+        this.wasm.setField(view, "GhosttySelection", "rectangle", 1);
+        this.wasm.free(start.ptr, start.size);
+        this.wasm.free(end.ptr, end.size);
+        return ptr;
+    }
+
+    #screenSelection(cols, rows) {
+        const start = this.#gridRef(C.POINT_SCREEN, 0, 0);
+        const end = this.#gridRef(C.POINT_SCREEN, cols - 1, rows - 1);
         const { ptr, size, view } = this.wasm.allocStruct("GhosttySelection");
         this.wasm.setU32(ptr, size);
         const startOff = this.wasm.field("GhosttySelection", "start").offset;

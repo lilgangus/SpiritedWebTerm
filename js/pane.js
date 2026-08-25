@@ -1,6 +1,7 @@
 import { Terminal } from "./terminal.js";
 import { Pty } from "./pty.js";
 import { Chrome } from "./chrome.js";
+import { Search } from "./search.js";
 import { bindInput } from "./input.js";
 
 /** One tab: VT terminal + PTY + pane chrome. */
@@ -21,6 +22,15 @@ export class Pane {
             pane: paneEl,
             windowEl,
             tabEl,
+        });
+        this.ui.search = new Search({
+            term: this.term,
+            wrap: this.ui.wrap,
+            screen: this.ui.screen,
+            onChange: () => {
+                this.ui.followLive = this.term.viewportActive();
+                this.ui.render();
+            },
         });
 
         this.pty.onOpen(() => {
@@ -45,6 +55,7 @@ export class Pane {
         });
         this.pty.onData((bytes) => {
             this.term.write(bytes);
+            if (this.ui.search?.isOpen()) this.ui.search.scheduleRefresh();
             if (this.ui.active) this.ui.render();
             else this.dirty = true;
         });
