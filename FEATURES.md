@@ -27,7 +27,7 @@ and then to the PTY.
 - Alternate-screen mouse tracking (when the program enables it)
 - Focus in/out reports (DEC mode 1004)
 - Live resize of cols/rows to the window
-- Manual PTY sessions: Open Terminal on first load; after `exit` / disconnect, New Terminal or View Session (read-only scrollback; Escape returns to the overlay)
+- New windows and tabs spawn a PTY immediately; after `exit` / disconnect, New Terminal, View Session (read-only scrollback; Escape returns to the overlay), or Close Tab
 
 ## Limits
 

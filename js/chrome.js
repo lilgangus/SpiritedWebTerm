@@ -34,6 +34,7 @@ export class Chrome {
         this.overlay = pane.querySelector(".session-overlay");
         this.openButton = pane.querySelector(".open-session");
         this.viewButton = pane.querySelector(".view-session");
+        this.closeButton = pane.querySelector(".close-session");
         this.bellEl = pane.querySelector(".bell");
         this.tabLabel = tabEl.querySelector(".tab-label");
         this.titleEl = windowEl.querySelector(".win-title");
@@ -59,12 +60,14 @@ export class Chrome {
             this.readonly = false;
             this.overlay.classList.add("hidden");
             this.viewButton.hidden = true;
+            this.closeButton.hidden = true;
             this.openButton.disabled = false;
             this.viewButton.disabled = false;
             return;
         }
-        this.openButton.textContent = hadSession ? "New Terminal" : "Open Terminal";
+        this.openButton.textContent = "New Terminal";
         this.viewButton.hidden = !hadSession;
+        this.closeButton.hidden = !hadSession;
         this.cursorEl.classList.remove("visible");
         this.openButton.disabled = false;
         this.viewButton.disabled = false;
@@ -81,7 +84,7 @@ export class Chrome {
             this.titleEl.textContent = label;
             if (this.windowFocused) document.title = label;
         }
-        if (this.active) this.openButton.focus();
+        if (this.active && hadSession) this.openButton.focus();
     }
 
     viewLogs() {

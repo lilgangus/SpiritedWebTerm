@@ -5,9 +5,10 @@ import { bindInput } from "./input.js";
 
 /** One tab: VT terminal + PTY + pane chrome. */
 export class Pane {
-    constructor({ wasm, wsUrl, paneEl, tabEl, windowEl }) {
+    constructor({ wasm, wsUrl, paneEl, tabEl, windowEl, host = null }) {
         this.el = paneEl;
         this.tabEl = tabEl;
+        this.host = host;
         this.hadSession = false;
         this.dirty = false;
 
@@ -25,11 +26,18 @@ export class Pane {
         this.pty.onOpen(() => {
             this.hadSession = true;
             this.term.reset();
+            // Hide the overlay before measuring. If we resize while it is
+            // still a flex sibling, wrap.clientHeight is too small, the PTY
+            // reports a short LINES, and vim's last row sits mid-pane.
+            this.ui.setDisconnected(false);
             this.ui.measureCells();
             this.ui.resizeToFit(true);
-            this.ui.setDisconnected(false);
+            requestAnimationFrame(() => {
+                this.ui.measureCells();
+                this.ui.resizeToFit(true);
+                this.ui.screen.focus();
+            });
             this.ui.render();
-            this.ui.screen.focus();
         });
         this.pty.onClose(() => {
             this.ui.setDisconnected(true, this.hadSession);
@@ -43,6 +51,7 @@ export class Pane {
 
         this.ui.openButton.addEventListener("click", () => this.#connect());
         this.ui.viewButton.addEventListener("click", () => this.ui.viewLogs());
+        this.ui.closeButton.addEventListener("click", () => this.host?.closeTab(this));
         this.ui.screen.addEventListener("keydown", (event) => {
             if (event.key === "Escape" && this.ui.readonly) {
                 event.preventDefault();
@@ -68,8 +77,9 @@ export class Pane {
             wrap: this.ui.wrap,
             ui: this.ui,
         });
-        this.ui.setDisconnected(true, false);
+        this.ui.setDisconnected(false);
         this.ui.render();
+        requestAnimationFrame(() => this.#connect());
     }
 
     #connect() {
@@ -80,6 +90,11 @@ export class Pane {
 
     setWindow(windowEl) {
         this.ui.setWindow(windowEl);
+    }
+
+    setHost(host) {
+        this.host = host;
+        this.setWindow(host.el);
     }
 
     setActive(active, windowFocused) {
@@ -96,6 +111,9 @@ export class Pane {
             }
             if (this.pty.open) {
                 this.ui.updateTitle();
+                this.ui.screen.focus();
+            } else if (this.pty.connecting || !this.hadSession) {
+                this.ui.setDisconnected(false);
                 this.ui.screen.focus();
             } else {
                 this.ui.setDisconnected(true, this.hadSession);

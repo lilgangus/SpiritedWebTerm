@@ -5,6 +5,7 @@ only: **libghostty-vt** (WASM) parses all VT output and encodes keys, paste,
 focus, and mouse into PTY bytes.
 
 See [FEATURES.md](FEATURES.md) for what works and what does not.
+See [TESTING.md](TESTING.md) for a regression plan (vim, less/`git log`, last-line `git push`).
 
 ## Layout
 

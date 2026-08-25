@@ -65,6 +65,9 @@ export class TermWindow {
             if (this.activePane.pty.open) {
                 this.activePane.ui.updateTitle();
                 this.activePane.ui.screen.focus();
+            } else if (this.activePane.pty.connecting || !this.activePane.hadSession) {
+                this.activePane.ui.setDisconnected(false);
+                this.activePane.ui.screen.focus();
             } else {
                 this.activePane.ui.setDisconnected(true, this.activePane.hadSession);
             }
@@ -83,6 +86,7 @@ export class TermWindow {
             paneEl,
             tabEl,
             windowEl: this.el,
+            host: this,
         });
         this.panes.push(pane);
         this.showPane(pane);
@@ -96,7 +100,7 @@ export class TermWindow {
     /** Insert an existing pane (e.g. dragged from another window). */
     insertPane(pane, index = this.panes.length) {
         const at = Math.max(0, Math.min(index, this.panes.length));
-        pane.setWindow(this.el);
+        pane.setHost(this);
         this.panes.splice(at, 0, pane);
         this.panesEl.appendChild(pane.el);
         const before = this.panes[at + 1]?.tabEl || this.tabAddBtn;
