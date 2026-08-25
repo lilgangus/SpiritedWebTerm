@@ -406,12 +406,12 @@ export class Terminal {
             if (event.altKey) { mods |= 0x04; if (event.code === "AltRight") mods |= 0x100; }
             if (event.metaKey) { mods |= 0x08; if (event.code === "MetaRight") mods |= 0x200; }
             this.wasm.exports.ghostty_key_event_set_mods(eventPtr, mods);
-            const keyCp = event.key.length === 1 ? event.key.codePointAt(0) : 0;
-            if (keyCp >= 0x20 && keyCp !== 0x7f && action !== C.KEY_RELEASE) {
-                const utf8 = new TextEncoder().encode(event.key);
-                utf8Len = utf8.length;
+            const utf8 = keyEventUtf8(event);
+            if (utf8 && action !== C.KEY_RELEASE) {
+                const encoded = new TextEncoder().encode(utf8);
+                utf8Len = encoded.length;
                 utf8Ptr = this.wasm.alloc(utf8Len);
-                this.wasm.bytes(utf8Ptr, utf8Len).set(utf8);
+                this.wasm.bytes(utf8Ptr, utf8Len).set(encoded);
                 this.wasm.exports.ghostty_key_event_set_utf8(eventPtr, utf8Ptr, utf8Len);
             }
             const unshifted = unshiftedCodepoint(event);
@@ -508,6 +508,21 @@ export class Terminal {
         this.wasm.exports.ghostty_wasm_free_usize(writtenPtr);
         return out && out.length ? out : null;
     }
+}
+
+function keyEventUtf8(event) {
+    if (!event.key) return null;
+    const cp = event.key.length === 1 ? event.key.codePointAt(0) : 0;
+    if (!cp || cp === 0x7f) return null;
+    // Match macOS Ghostty: C0 controls are encoded from mods, not utf8 text.
+    if (cp < 0x20) {
+        if (event.code.startsWith("Key")) return event.code.slice(3).toLowerCase();
+        if (event.code.startsWith("Digit")) return event.code.slice(5);
+        return null;
+    }
+    // Modifier chords are encoded from the physical key, not DOM text.
+    if (event.ctrlKey || event.altKey || event.metaKey) return null;
+    return event.key;
 }
 
 function unshiftedCodepoint(event) {

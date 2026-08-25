@@ -33,6 +33,47 @@ WASM_PATH = REPO_ROOT / "zig-out" / "bin" / "ghostty-vt.wasm"
 WS_MAGIC = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 
+def terminfo_available(name: str) -> bool:
+    """True if terminfo for `name` can be looked up."""
+    import subprocess
+
+    try:
+        return (
+            subprocess.run(
+                ["infocmp", name],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            ).returncode
+            == 0
+        )
+    except OSError:
+        return False
+
+
+def shell_env(cols: int, rows: int) -> dict[str, str]:
+    """Build the PTY child environment to match native Ghostty where possible."""
+    env = os.environ.copy()
+    # Prefer Ghostty's TERM when its terminfo is installed; otherwise fall back
+    # so apps don't print "terminal is not fully functional" / break backspace.
+    if terminfo_available("xterm-ghostty"):
+        env["TERM"] = "xterm-ghostty"
+    else:
+        env["TERM"] = "xterm-256color"
+    env["COLORTERM"] = "truecolor"
+    env["TERM_PROGRAM"] = "ghostty"
+    env["TERM_PROGRAM_VERSION"] = os.environ.get("GHOSTTY_VERSION", "1.3.2-dev")
+    env["COLUMNS"] = str(cols)
+    env["LINES"] = str(rows)
+    # zsh picks emacs vs vi line-editing from EDITOR/VISUAL before .zshrc runs.
+    # If we inherit EDITOR=vim from the server process, Ctrl+A inserts ^A instead
+    # of jumping to the start (viins "main" keymap). Ghostty launches usually
+    # don't have EDITOR set yet, so let .zshrc export it after keymap selection.
+    env.pop("EDITOR", None)
+    env.pop("VISUAL", None)
+    return env
+
+
 def set_winsize(fd: int, rows: int, cols: int) -> None:
     packed = struct.pack("HHHH", rows, cols, 0, 0)
     # TIOCSWINSZ
@@ -48,11 +89,7 @@ def spawn_shell(cols: int, rows: int) -> tuple[int, int]:
     if pid == 0:
         try:
             set_winsize(0, rows, cols)
-            env = os.environ.copy()
-            env["TERM"] = "xterm-256color"
-            env["COLORTERM"] = "truecolor"
-            env["COLUMNS"] = str(cols)
-            env["LINES"] = str(rows)
+            env = shell_env(cols, rows)
             argv = [SHELL, "-l"] if os.path.basename(SHELL) in ("bash", "zsh") else [SHELL]
             os.execvpe(argv[0], argv, env)
         except Exception as exc:  # pragma: no cover
