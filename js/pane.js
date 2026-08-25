@@ -41,8 +41,13 @@ export class Pane {
         });
 
         this.ui.openButton.addEventListener("click", () => this.#connect());
-        this.ui.viewNewButton.addEventListener("click", () => this.#connect());
         this.ui.viewButton.addEventListener("click", () => this.ui.viewLogs());
+        this.ui.screen.addEventListener("keydown", (event) => {
+            if (event.key === "Escape" && this.ui.readonly) {
+                event.preventDefault();
+                this.ui.exitViewLogs();
+            }
+        });
 
         this.term.installEffects({
             onWritePty: (bytes) => this.pty.send(bytes),
@@ -70,6 +75,10 @@ export class Pane {
         if (this.pty.open || this.pty.connecting) return;
         this.ui.prepareConnect();
         this.pty.connect();
+    }
+
+    setWindow(windowEl) {
+        this.ui.setWindow(windowEl);
     }
 
     setActive(active, windowFocused) {

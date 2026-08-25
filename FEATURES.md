@@ -7,8 +7,10 @@ and then to the PTY.
 ## Supported
 
 - Ghostty-like window chrome (traffic lights, tabs, title, default `#282c34` theme)
-- Floating windows: drag the titlebar, resize from the corner; tab-strip `+` opens a tab, titlebar `+` opens a new window
-- Snap left, right, or to a corner from the Snap menu or by dragging to an edge
+- Floating windows: drag the titlebar, resize from the corner; tab-row `+` opens a tab (beside the last tab), titlebar `+` opens a new window
+- Tab bar scrolls horizontally once tabs hit a readable minimum width; scrollbar gutter is reserved so layout does not jump
+- Drag tabs to reorder, drop onto another window, or drop on the desktop to detach into a new window
+- Snap left, right, corners, or full screen from the green traffic-light menu (or by dragging to an edge)
 - VT parse and HTML render via libghostty-vt (`ghostty_terminal_vt_write` + HTML formatter)
 - Default Ghostty palette, fg/bg/cursor colors
 - Block cursor overlay, optional blink (DEC mode 12)
@@ -25,7 +27,7 @@ and then to the PTY.
 - Alternate-screen mouse tracking (when the program enables it)
 - Focus in/out reports (DEC mode 1004)
 - Live resize of cols/rows to the window
-- Manual PTY sessions: Open Terminal on first load; after `exit` / disconnect, New Terminal or View Session (read-only scrollback)
+- Manual PTY sessions: Open Terminal on first load; after `exit` / disconnect, New Terminal or View Session (read-only scrollback; Escape returns to the overlay)
 
 ## Limits
 

@@ -3,7 +3,7 @@ import { snapRect } from "./snap.js";
 
 /** One floating Ghostty-like window with tabs. */
 export class TermWindow {
-    constructor({ desktop, wasm, wsUrl, bounds }) {
+    constructor({ desktop, wasm, wsUrl, bounds, empty = false }) {
         this.desktop = desktop;
         this.wasm = wasm;
         this.wsUrl = wsUrl;
@@ -19,14 +19,13 @@ export class TermWindow {
         this.tabAddBtn = this.el.querySelector(".tab-add");
         this.panesEl = this.el.querySelector(".panes");
         this.plusBtn = this.el.querySelector(".plus");
-        this.snapBtn = this.el.querySelector(".snap-btn");
-        this.snapMenu = this.el.querySelector(".snap-menu");
+        this.maxMenu = this.el.querySelector(".max-menu");
         this.grip = this.el.querySelector(".resize-grip");
 
         desktop.el.appendChild(this.el);
         this.setBounds(bounds);
         this.#bindChrome();
-        this.addTab();
+        if (!empty) this.addTab();
         this.focus();
         this._ro = new ResizeObserver(() => this.layout());
         this._ro.observe(this.el);
@@ -74,7 +73,7 @@ export class TermWindow {
         const paneEl = this.desktop.paneTemplate.content.firstElementChild.cloneNode(true);
         const tabEl = this.desktop.tabTemplate.content.firstElementChild.cloneNode(true);
         this.panesEl.appendChild(paneEl);
-        this.tabsEl.appendChild(tabEl);
+        this.tabsEl.insertBefore(tabEl, this.tabAddBtn);
 
         const pane = new Pane({
             wasm: this.wasm,
@@ -84,27 +83,65 @@ export class TermWindow {
             windowEl: this.el,
         });
         this.panes.push(pane);
-
-        tabEl.addEventListener("mousedown", (event) => {
-            event.stopPropagation();
-            this.focus();
-            if (event.target.closest(".tab-close")) {
-                event.preventDefault();
-                this.closeTab(pane);
-                return;
-            }
-            this.showPane(pane);
-        });
-
         this.showPane(pane);
         this.#syncTabClose();
-        requestAnimationFrame(() => this.layout());
+        requestAnimationFrame(() => {
+            this.tabsEl.scrollLeft = this.tabsEl.scrollWidth;
+            this.layout();
+        });
         return pane;
+    }
+
+    /** Insert an existing pane (e.g. dragged from another window). */
+    insertPane(pane, index = this.panes.length) {
+        const at = Math.max(0, Math.min(index, this.panes.length));
+        pane.setWindow(this.el);
+        this.panes.splice(at, 0, pane);
+        this.panesEl.appendChild(pane.el);
+        const before = this.panes[at + 1]?.tabEl || this.tabAddBtn;
+        this.tabsEl.insertBefore(pane.tabEl, before);
+        this.showPane(pane);
+        this.#syncTabClose();
+        requestAnimationFrame(() => {
+            pane.tabEl.scrollIntoView({ inline: "nearest", block: "nearest" });
+            this.layout();
+        });
+    }
+
+    /** Remove pane from this window without disposing the session. */
+    releasePane(pane) {
+        const index = this.panes.indexOf(pane);
+        if (index < 0) return -1;
+        this.panes.splice(index, 1);
+        if (this.activePane === pane) this.activePane = null;
+        pane.el.remove();
+        pane.tabEl.remove();
+        if (this.panes.length) {
+            this.showPane(this.panes[Math.min(index, this.panes.length - 1)]);
+        }
+        this.#syncTabClose();
+        return index;
+    }
+
+    reorderPane(pane, index) {
+        const from = this.panes.indexOf(pane);
+        if (from < 0) return;
+        let to = Math.max(0, Math.min(index, this.panes.length));
+        if (from === to || from + 1 === to) return;
+        this.panes.splice(from, 1);
+        if (to > from) to -= 1;
+        this.panes.splice(to, 0, pane);
+        const before = this.panes[to + 1]?.tabEl || this.tabAddBtn;
+        this.tabsEl.insertBefore(pane.tabEl, before);
+        this.#syncTabClose();
     }
 
     showPane(pane) {
         this.activePane = pane;
         for (const p of this.panes) p.setActive(p === pane, this.desktop.focused === this);
+        requestAnimationFrame(() => {
+            pane.tabEl.scrollIntoView({ inline: "nearest", block: "nearest" });
+        });
     }
 
     closeTab(pane) {
@@ -118,6 +155,10 @@ export class TermWindow {
         this.panes.splice(index, 1);
         this.showPane(this.panes[Math.max(0, index - 1)]);
         this.#syncTabClose();
+    }
+
+    closeIfEmpty() {
+        if (this.panes.length === 0) this.close();
     }
 
     close() {
@@ -178,7 +219,16 @@ export class TermWindow {
     }
 
     hideMenus() {
-        this.snapMenu.hidden = true;
+        this.maxMenu.hidden = true;
+    }
+
+    #applySnapAction(kind) {
+        if (kind === "max") this.toggleMaximize();
+        else this.snap(kind);
+    }
+
+    #paneFromTab(tabEl) {
+        return this.panes.find((pane) => pane.tabEl === tabEl) || null;
     }
 
     #bindChrome() {
@@ -186,12 +236,40 @@ export class TermWindow {
 
         this.titlebar.addEventListener("pointerdown", (event) => {
             if (event.button !== 0) return;
-            if (event.target.closest("button, .tab, .menu")) return;
+            if (event.target.closest(".tab, .tl, .tab-add, .plus, .menu")) return;
             this.desktop.beginDrag(this, event);
         });
         this.titlebar.addEventListener("dblclick", (event) => {
-            if (event.target.closest("button, .tab")) return;
+            if (event.target.closest(".tab, .tl, .tab-add, .plus, .menu")) return;
             this.toggleMaximize();
+        });
+
+        this.tabsEl.addEventListener("wheel", (event) => {
+            if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+            if (this.tabsEl.scrollWidth <= this.tabsEl.clientWidth) return;
+            event.preventDefault();
+            this.tabsEl.scrollLeft += event.deltaY;
+        }, { passive: false });
+
+        this.tabsEl.addEventListener("pointerdown", (event) => {
+            if (event.button !== 0) return;
+            const tab = event.target.closest(".tab");
+            if (tab && this.tabsEl.contains(tab)) {
+                event.stopPropagation();
+                this.focus();
+                const pane = this.#paneFromTab(tab);
+                if (!pane) return;
+                if (event.target.closest(".tab-close")) {
+                    event.preventDefault();
+                    this.closeTab(pane);
+                    return;
+                }
+                this.showPane(pane);
+                this.desktop.beginTabDrag(this, pane, event);
+                return;
+            }
+            if (event.target.closest(".tab-add")) return;
+            this.desktop.beginDrag(this, event);
         });
 
         this.el.querySelector(".close").addEventListener("click", (event) => {
@@ -205,7 +283,13 @@ export class TermWindow {
         });
         this.el.querySelector(".max").addEventListener("click", (event) => {
             event.stopPropagation();
-            this.toggleMaximize();
+            this.maxMenu.hidden = !this.maxMenu.hidden;
+        });
+        this.maxMenu.addEventListener("click", (event) => {
+            const kind = event.target.closest("button")?.dataset.snap;
+            if (!kind) return;
+            this.hideMenus();
+            this.#applySnapAction(kind);
         });
 
         this.tabAddBtn.addEventListener("click", (event) => {
@@ -218,17 +302,6 @@ export class TermWindow {
             event.stopPropagation();
             this.hideMenus();
             this.desktop.createWindow();
-        });
-
-        this.snapBtn.addEventListener("click", (event) => {
-            event.stopPropagation();
-            this.snapMenu.hidden = !this.snapMenu.hidden;
-        });
-        this.snapMenu.addEventListener("click", (event) => {
-            const kind = event.target.closest("button")?.dataset.snap;
-            if (!kind) return;
-            this.hideMenus();
-            this.snap(kind);
         });
 
         this.grip.addEventListener("pointerdown", (event) => {

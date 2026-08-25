@@ -16,7 +16,7 @@ example/wasm-browser-term/
   css/app.css         window chrome + screen
   js/main.js          boots wasm and the desktop
   js/desktop.js       floating windows, drag, resize, snap preview
-  js/window.js        one window: titlebar, tabs, plus/snap menus
+  js/window.js        one window: titlebar, tabs, plus/max menus
   js/pane.js          one tab: VT terminal + PTY + chrome
   js/snap.js          left/right/corner snap geometry
   js/wasm.js          ghostty-vt.wasm heap / struct helpers

@@ -20,6 +20,7 @@ export class Desktop {
         this.cascade = 0;
         this._drag = null;
         this._resize = null;
+        this._tabDrag = null;
 
         this.emptyBtn.addEventListener("click", () => this.createWindow());
         window.addEventListener("pointermove", (event) => this.#onMove(event));
@@ -35,6 +36,7 @@ export class Desktop {
         document.addEventListener("keydown", (event) => {
             if (event.key === "Escape") {
                 for (const win of this.windows) win.hideMenus();
+                this.#cancelTabDrag();
             }
         });
     }
@@ -48,21 +50,27 @@ export class Desktop {
         return { x: event.clientX - rect.left, y: event.clientY - rect.top };
     }
 
-    createWindow() {
+    createWindow({ pane = null, bounds = null, empty = false } = {}) {
         const desk = this.size();
-        const w = Math.min(920, Math.max(480, desk.w - 96));
-        const h = Math.min(580, Math.max(320, desk.h - 96));
-        const offset = (this.cascade++ % 8) * 28;
-        const x = Math.max(16, Math.min((desk.w - w) / 2 + offset, desk.w - w - 16));
-        const y = Math.max(16, Math.min((desk.h - h) / 2 + offset, desk.h - h - 16));
+        let rect = bounds;
+        if (!rect) {
+            const w = Math.min(920, Math.max(480, desk.w - 96));
+            const h = Math.min(580, Math.max(320, desk.h - 96));
+            const offset = (this.cascade++ % 8) * 28;
+            const x = Math.max(16, Math.min((desk.w - w) / 2 + offset, desk.w - w - 16));
+            const y = Math.max(16, Math.min((desk.h - h) / 2 + offset, desk.h - h - 16));
+            rect = { x, y, w, h };
+        }
         const win = new TermWindow({
             desktop: this,
             wasm: this.wasm,
             wsUrl: this.wsUrl,
-            bounds: { x, y, w, h },
+            bounds: rect,
+            empty: empty || !!pane,
         });
         this.windows.push(win);
         this.emptyBtn.hidden = true;
+        if (pane) win.insertPane(pane, 0);
         this.raise(win);
         return win;
     }
@@ -85,7 +93,7 @@ export class Desktop {
     }
 
     beginDrag(win, event) {
-        if (win.el.classList.contains("minimized")) return;
+        if (this._tabDrag || win.el.classList.contains("minimized")) return;
         this.raise(win);
         win.hideMenus();
         const b = win.bounds;
@@ -104,7 +112,7 @@ export class Desktop {
     }
 
     beginResize(win, event) {
-        if (win.el.classList.contains("minimized")) return;
+        if (this._tabDrag || win.el.classList.contains("minimized")) return;
         this.raise(win);
         win.hideMenus();
         const b = win.bounds;
@@ -122,7 +130,28 @@ export class Desktop {
         event.preventDefault();
     }
 
+    beginTabDrag(fromWin, pane, event) {
+        if (this._drag || this._resize) return;
+        fromWin.hideMenus();
+        this._tabDrag = {
+            fromWin,
+            pane,
+            startX: event.clientX,
+            startY: event.clientY,
+            offsetX: event.clientX - pane.tabEl.getBoundingClientRect().left,
+            offsetY: event.clientY - pane.tabEl.getBoundingClientRect().top,
+            moved: false,
+            ghost: null,
+            drop: null,
+        };
+        event.preventDefault();
+    }
+
     #onMove(event) {
+        if (this._tabDrag) {
+            this.#onTabMove(event);
+            return;
+        }
         const desk = this.size();
         const pt = this.pointer(event);
         if (this._drag) {
@@ -157,6 +186,10 @@ export class Desktop {
     }
 
     #onUp(event) {
+        if (this._tabDrag) {
+            this.#onTabUp(event);
+            return;
+        }
         if (this._drag) {
             const { win, moved } = this._drag;
             win.el.classList.remove("dragging");
@@ -170,6 +203,144 @@ export class Desktop {
             return;
         }
         this._resize = null;
+    }
+
+    #onTabMove(event) {
+        const drag = this._tabDrag;
+        if (!drag) return;
+        const dist = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
+        if (!drag.moved && dist < MIN_DRAG) return;
+        if (!drag.moved) {
+            drag.moved = true;
+            drag.pane.tabEl.classList.add("dragging");
+            drag.ghost = this.#makeTabGhost(drag.pane);
+            this.el.appendChild(drag.ghost);
+        }
+        drag.ghost.style.left = `${Math.round(event.clientX - drag.offsetX)}px`;
+        drag.ghost.style.top = `${Math.round(event.clientY - drag.offsetY)}px`;
+        this.#setTabDrop(this.#hitTabDrop(event.clientX, event.clientY, drag));
+    }
+
+    #onTabUp(event) {
+        const drag = this._tabDrag;
+        if (!drag) return;
+        const drop = drag.moved
+            ? this.#hitTabDrop(event.clientX, event.clientY, drag)
+            : null;
+        this.#clearTabDrop();
+        drag.pane.tabEl.classList.remove("dragging");
+        drag.ghost?.remove();
+        this._tabDrag = null;
+
+        if (!drag.moved || !drop) return;
+
+        const { fromWin, pane } = drag;
+        if (drop.kind === "reorder") {
+            fromWin.reorderPane(pane, drop.index);
+            fromWin.showPane(pane);
+            return;
+        }
+        if (drop.kind === "window") {
+            if (drop.win === fromWin) {
+                fromWin.reorderPane(pane, drop.index);
+                fromWin.showPane(pane);
+                return;
+            }
+            fromWin.releasePane(pane);
+            drop.win.insertPane(pane, drop.index);
+            fromWin.closeIfEmpty();
+            this.raise(drop.win);
+            return;
+        }
+        if (drop.kind === "new") {
+            const desk = this.size();
+            const w = Math.min(920, Math.max(480, fromWin.bounds.w));
+            const h = Math.min(580, Math.max(320, fromWin.bounds.h));
+            const x = Math.max(16, Math.min(drop.x - 80, desk.w - w - 16));
+            const y = Math.max(16, Math.min(drop.y - 16, desk.h - h - 16));
+            fromWin.releasePane(pane);
+            this.createWindow({ pane, bounds: { x, y, w, h } });
+            fromWin.closeIfEmpty();
+        }
+    }
+
+    #cancelTabDrag() {
+        const drag = this._tabDrag;
+        if (!drag) return;
+        this.#clearTabDrop();
+        drag.pane.tabEl.classList.remove("dragging");
+        drag.ghost?.remove();
+        this._tabDrag = null;
+    }
+
+    #makeTabGhost(pane) {
+        const ghost = document.createElement("div");
+        ghost.className = "tab-ghost";
+        ghost.textContent = pane.tabEl.querySelector(".tab-label")?.textContent || "Ghostty";
+        const rect = pane.tabEl.getBoundingClientRect();
+        ghost.style.width = `${Math.round(rect.width)}px`;
+        return ghost;
+    }
+
+    #hitTabDrop(clientX, clientY, drag) {
+        const stack = document.elementsFromPoint(clientX, clientY);
+        for (const el of stack) {
+            if (el === drag.ghost || el === drag.pane.tabEl) continue;
+            const tab = el.closest?.(".tab");
+            if (tab) {
+                const win = this.windows.find((w) => w.tabsEl.contains(tab));
+                if (!win) continue;
+                const pane = win.panes.find((p) => p.tabEl === tab);
+                if (!pane || pane === drag.pane) continue;
+                const rect = tab.getBoundingClientRect();
+                const before = clientX < rect.left + rect.width / 2;
+                const index = win.panes.indexOf(pane) + (before ? 0 : 1);
+                return { kind: win === drag.fromWin ? "reorder" : "window", win, index, tab, before };
+            }
+            if (el.classList?.contains("tabs") || el.classList?.contains("tab-add")) {
+                const win = this.windows.find((w) => w.tabsEl === el || w.tabsEl.contains(el));
+                if (!win) continue;
+                return {
+                    kind: win === drag.fromWin ? "reorder" : "window",
+                    win,
+                    index: win.panes.length,
+                    end: true,
+                };
+            }
+            const windowEl = el.closest?.(".window");
+            if (windowEl) {
+                const win = this.windows.find((w) => w.el === windowEl);
+                if (!win) continue;
+                if (win === drag.fromWin) return null;
+                return { kind: "window", win, index: win.panes.length, end: true };
+            }
+        }
+        const pt = this.pointer({ clientX, clientY });
+        return { kind: "new", x: pt.x, y: pt.y };
+    }
+
+    #setTabDrop(drop) {
+        this.#clearTabDrop();
+        this._tabDrop = drop;
+        if (!drop) return;
+        if (drop.tab && drop.before) drop.tab.classList.add("drop-before");
+        else if (drop.tab && !drop.before) drop.tab.classList.add("drop-after");
+        else if (drop.win && drop.end) {
+            drop.win.tabsEl.classList.add("drop-end");
+            drop.win.tabsEl.classList.add("drop-target");
+        } else if (drop.win) {
+            drop.win.tabsEl.classList.add("drop-target");
+        }
+    }
+
+    #clearTabDrop() {
+        for (const win of this.windows) {
+            win.tabsEl.classList.remove("drop-end", "drop-target");
+            for (const pane of win.panes) {
+                pane.tabEl.classList.remove("drop-before", "drop-after");
+            }
+        }
+        this._tabDrop = null;
     }
 
     #preview(zone, desk) {

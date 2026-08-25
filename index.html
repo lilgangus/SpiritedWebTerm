@@ -19,25 +19,24 @@
                 <div class="traffic" aria-hidden="true">
                     <button type="button" class="tl close" title="Close"></button>
                     <button type="button" class="tl min" title="Minimize"></button>
-                    <button type="button" class="tl max" title="Maximize"></button>
+                    <div class="max-wrap">
+                        <button type="button" class="tl max" title="Snap and full screen" aria-label="Snap and full screen"></button>
+                        <div class="menu max-menu" hidden>
+                            <button type="button" data-snap="max">Full Screen</button>
+                            <button type="button" data-snap="left">Left</button>
+                            <button type="button" data-snap="right">Right</button>
+                            <button type="button" data-snap="top-left">Top left</button>
+                            <button type="button" data-snap="top-right">Top right</button>
+                            <button type="button" data-snap="bottom-left">Bottom left</button>
+                            <button type="button" data-snap="bottom-right">Bottom right</button>
+                        </div>
+                    </div>
                 </div>
-                <div class="tab-strip">
-                    <div class="tabs"></div>
+                <div class="tabs">
                     <button type="button" class="tab-add" title="New tab" aria-label="New tab">+</button>
                 </div>
                 <button type="button" class="plus" title="New window" aria-label="New window">+</button>
                 <div class="win-title">Ghostty</div>
-                <div class="snap-wrap">
-                    <button type="button" class="snap-btn" title="Snap window" aria-label="Snap window">Snap</button>
-                    <div class="menu snap-menu" hidden>
-                        <button type="button" data-snap="left">Left</button>
-                        <button type="button" data-snap="right">Right</button>
-                        <button type="button" data-snap="top-left">Top left</button>
-                        <button type="button" data-snap="top-right">Top right</button>
-                        <button type="button" data-snap="bottom-left">Bottom left</button>
-                        <button type="button" data-snap="bottom-right">Bottom right</button>
-                    </div>
-                </div>
             </div>
             <div class="panes"></div>
             <div class="resize-grip" aria-hidden="true"></div>
@@ -66,10 +65,6 @@
                     <button type="button" class="open-session">Open Terminal</button>
                     <button type="button" class="view-session" hidden>View Session</button>
                 </div>
-            </div>
-            <div class="view-banner" hidden>
-                <span>Read-only — session ended</span>
-                <button type="button" class="view-new">New Terminal</button>
             </div>
             <style class="vt-palette"></style>
         </div>

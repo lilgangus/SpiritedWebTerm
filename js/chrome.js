@@ -32,8 +32,6 @@ export class Chrome {
         this.overlay = pane.querySelector(".session-overlay");
         this.openButton = pane.querySelector(".open-session");
         this.viewButton = pane.querySelector(".view-session");
-        this.viewBanner = pane.querySelector(".view-banner");
-        this.viewNewButton = pane.querySelector(".view-new");
         this.bellEl = pane.querySelector(".bell");
         this.tabLabel = tabEl.querySelector(".tab-label");
         this.titleEl = windowEl.querySelector(".win-title");
@@ -49,15 +47,18 @@ export class Chrome {
         }
     }
 
+    setWindow(windowEl) {
+        this.windowEl = windowEl;
+        this.titleEl = windowEl.querySelector(".win-title");
+    }
+
     setDisconnected(disconnected, hadSession = false) {
         if (!disconnected) {
             this.readonly = false;
             this.overlay.classList.add("hidden");
-            this.viewBanner.hidden = true;
             this.viewButton.hidden = true;
             this.openButton.disabled = false;
             this.viewButton.disabled = false;
-            this.viewNewButton.disabled = false;
             return;
         }
         this.openButton.textContent = hadSession ? "New Terminal" : "Open Terminal";
@@ -65,16 +66,13 @@ export class Chrome {
         this.cursorEl.classList.remove("visible");
         this.openButton.disabled = false;
         this.viewButton.disabled = false;
-        this.viewNewButton.disabled = false;
         if (this.readonly && hadSession) {
             this.overlay.classList.add("hidden");
-            this.viewBanner.hidden = false;
             this.updateTitle();
             return;
         }
         this.readonly = false;
         this.overlay.classList.remove("hidden");
-        this.viewBanner.hidden = true;
         const label = hadSession ? "Disconnected" : "Ghostty";
         this.tabLabel.textContent = label;
         if (this.active) {
@@ -87,19 +85,22 @@ export class Chrome {
     viewLogs() {
         this.readonly = true;
         this.overlay.classList.add("hidden");
-        this.viewBanner.hidden = false;
         this.cursorEl.classList.remove("visible");
         this.updateTitle();
         this.render();
         this.screen.focus();
     }
 
+    exitViewLogs() {
+        if (!this.readonly) return;
+        this.readonly = false;
+        this.setDisconnected(true, true);
+    }
+
     prepareConnect() {
         this.readonly = false;
-        this.viewBanner.hidden = true;
         this.openButton.disabled = true;
         this.viewButton.disabled = true;
-        this.viewNewButton.disabled = true;
     }
 
     jumpToLive() {
