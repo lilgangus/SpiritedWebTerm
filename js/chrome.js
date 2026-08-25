@@ -22,6 +22,7 @@ export class Chrome {
         this.renderQueued = false;
         this.selecting = false;
         this.pendingRender = false;
+        this.ignoreWheelUntil = 0;
         this.lastHtmlSig = "";
         this.drag = null;
         this.lastScrollbar = { total: 24, offset: 0, len: 24 };
@@ -108,7 +109,12 @@ export class Chrome {
 
     jumpToLive() {
         this.followLive = true;
+        this.selecting = false;
+        this.pendingRender = false;
+        this.ignoreWheelUntil = performance.now() + 150;
         if (!this.term.viewportActive()) this.term.scroll(C.SCROLL_BOTTOM);
+        this.lastHtmlSig = "";
+        this.render();
     }
 
     hasDomSelection() {
@@ -304,6 +310,7 @@ export class Chrome {
         });
         this.track.addEventListener("wheel", (event) => {
             event.preventDefault();
+            if (this.ignoreWheelUntil && performance.now() < this.ignoreWheelUntil) return;
             this.followLive = false;
             const lines = Math.max(1, Math.round(Math.abs(event.deltaY) / 40));
             this.term.scroll(C.SCROLL_DELTA, event.deltaY < 0 ? -lines : lines);
