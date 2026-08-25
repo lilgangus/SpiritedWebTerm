@@ -94,10 +94,9 @@ export function bindInput({ term, pty, screen, wrap, ui }) {
             return;
         }
         if (isCopyChord(event)) {
-            if (selectedText(screen)) {
-                event.preventDefault();
-                navigator.clipboard.writeText(selectedText(screen)).catch(() => {});
-            }
+            event.preventDefault();
+            const text = selectedText(screen);
+            if (text) navigator.clipboard.writeText(text).catch(() => {});
             return;
         }
         if (isSelectAllChord(event)) {
@@ -160,17 +159,19 @@ export function bindInput({ term, pty, screen, wrap, ui }) {
 
     wrap.addEventListener("mousedown", (event) => {
         screen.focus();
-        if (!isLive()) return;
         if (event.button === 1) {
+            if (!isLive()) return;
             event.preventDefault();
             pasteFromClipboard();
             return;
         }
-        if (term.boolData(C.DATA_MOUSE_TRACKING) && !event.shiftKey) {
+        if (isLive() && term.boolData(C.DATA_MOUSE_TRACKING) && !event.shiftKey) {
             event.preventDefault();
             mouseDown = true;
             sendMouse(C.MOUSE_PRESS, mouseButton(event), event);
+            return;
         }
+        if (event.button === 0) ui.beginSelecting();
     });
 
     window.addEventListener("mousemove", (event) => {
@@ -179,9 +180,11 @@ export function bindInput({ term, pty, screen, wrap, ui }) {
         }
     });
     window.addEventListener("mouseup", (event) => {
-        if (!mouseDown) return;
-        mouseDown = false;
-        sendMouse(C.MOUSE_RELEASE, mouseButton(event), event);
+        if (mouseDown) {
+            mouseDown = false;
+            sendMouse(C.MOUSE_RELEASE, mouseButton(event), event);
+        }
+        ui.endSelecting();
     });
 
     screen.addEventListener("paste", (event) => {

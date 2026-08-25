@@ -7,8 +7,11 @@ export const KEY_RELEASE = 0;
 export const KEY_PRESS = 1;
 export const KEY_REPEAT = 2;
 
+export const POINT_ACTIVE = 0;
 export const POINT_VIEWPORT = 1;
 
+export const DATA_COLS = 1;
+export const DATA_ROWS = 2;
 export const DATA_CURSOR_X = 3;
 export const DATA_CURSOR_Y = 4;
 export const DATA_CURSOR_VISIBLE = 7;

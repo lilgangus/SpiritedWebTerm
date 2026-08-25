@@ -20,6 +20,9 @@ export class Chrome {
         this.cols = 80;
         this.rows = 24;
         this.renderQueued = false;
+        this.selecting = false;
+        this.pendingRender = false;
+        this.lastHtmlSig = "";
         this.drag = null;
         this.lastScrollbar = { total: 24, offset: 0, len: 24 };
 
@@ -108,6 +111,24 @@ export class Chrome {
         if (!this.term.viewportActive()) this.term.scroll(C.SCROLL_BOTTOM);
     }
 
+    hasDomSelection() {
+        const sel = document.getSelection();
+        if (!sel || sel.isCollapsed) return false;
+        return this.screen.contains(sel.anchorNode) || this.screen.contains(sel.focusNode);
+    }
+
+    beginSelecting() {
+        this.selecting = true;
+    }
+
+    endSelecting() {
+        this.selecting = false;
+        if (this.pendingRender) {
+            this.pendingRender = false;
+            this.render();
+        }
+    }
+
     onFontChord(kind) {
         const next = kind === "inc" ? this.fontSize + 1
             : kind === "dec" ? this.fontSize - 1 : 13;
@@ -125,11 +146,11 @@ export class Chrome {
     measureCells() {
         const probe = document.createElement("span");
         probe.textContent = "M".repeat(80);
-        probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre;";
+        probe.style.cssText = "position:absolute;left:0;top:0;visibility:hidden;white-space:pre;line-height:normal;";
         this.wrap.appendChild(probe);
         const rect = probe.getBoundingClientRect();
         this.cellW = rect.width / 80 || 8;
-        this.cellH = rect.height || this.fontSize * 1.35;
+        this.cellH = Math.max(1, Math.round(rect.height) || Math.round(this.fontSize * 1.35));
         this.wrap.removeChild(probe);
         this._setVar("--cell-w", `${this.cellW}px`);
         this._setVar("--cell-h", `${this.cellH}px`);
@@ -208,8 +229,27 @@ export class Chrome {
             this.paletteStyle.textContent = scoped.slice(start + 7, end);
             body = (scoped.slice(0, start) + scoped.slice(end + 8)).trim();
         }
-        this.screen.innerHTML = body;
-        if (this.term.viewportActive()) {
+
+        let inner = body;
+        const open = body.match(/^<div\b[^>]*>/i);
+        if (open) {
+            inner = body.slice(open[0].length);
+            if (inner.endsWith("</div>")) inner = inner.slice(0, -"</div>".length);
+        }
+
+        let lines = inner.length ? inner.split("\n") : [];
+        if (lines.length > this.rows) {
+            lines = (this.followLive || this.term.viewportActive())
+                ? lines.slice(lines.length - this.rows)
+                : lines.slice(0, this.rows);
+        }
+        while (lines.length < this.rows) lines.push("");
+
+        const next = lines.map((line) => `<div class="row">${line}</div>`).join("");
+        if (next === this.lastHtmlSig) return;
+        this.lastHtmlSig = next;
+        this.screen.innerHTML = next;
+        if (this.followLive || this.term.viewportActive()) {
             this.screen.scrollTop = this.screen.scrollHeight;
         } else {
             this.screen.scrollTop = 0;
@@ -221,6 +261,10 @@ export class Chrome {
         this.renderQueued = true;
         requestAnimationFrame(() => {
             this.renderQueued = false;
+            if (this.selecting || this.hasDomSelection()) {
+                this.pendingRender = true;
+                return;
+            }
             try {
                 this.applyHtml(this.term.formatHtml());
                 this.updateColors();

@@ -1,3 +1,4 @@
+import * as C from "./constants.js";
 import { Terminal } from "./terminal.js";
 import { Pty } from "./pty.js";
 import { Chrome } from "./chrome.js";
@@ -35,7 +36,8 @@ export class Pane {
             this.ui.render();
         });
         this.pty.onData((bytes) => {
-            this.term.write(bytes);
+            if (this.ui.followLive) this.term.scroll(C.SCROLL_BOTTOM);
+            this.term.write(bytes, this.ui.followLive);
             if (this.ui.active) this.ui.render();
             else this.dirty = true;
         });

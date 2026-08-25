@@ -124,9 +124,9 @@ export class Terminal {
         }
     }
 
-    write(bytes) {
+    write(bytes, followLive = null) {
         if (!bytes || !bytes.length) return;
-        const follow = this.viewportActive();
+        const follow = followLive ?? this.viewportActive();
         const ptr = this.wasm.alloc(bytes.length);
         this.wasm.bytes(ptr, bytes.length).set(bytes);
         this.wasm.exports.ghostty_terminal_vt_write(this.ptr, ptr, bytes.length);
@@ -189,6 +189,29 @@ export class Terminal {
             return new DataView(this.wasm.buffer).getUint8(ptr) !== 0;
         } finally {
             this.wasm.exports.ghostty_wasm_free_u8(ptr);
+        }
+    }
+
+    usizeData(id) {
+        const ptr = this.wasm.exports.ghostty_wasm_alloc_usize();
+        try {
+            const result = this.wasm.exports.ghostty_terminal_get(this.ptr, id, ptr);
+            if (result !== C.SUCCESS) return 0;
+            return this.wasm.u32(ptr);
+        } finally {
+            this.wasm.exports.ghostty_wasm_free_usize(ptr);
+        }
+    }
+
+    /** COLS/ROWS/CURSOR_* are CellCountInt (u16) in libghostty-vt. */
+    cellCountData(id) {
+        const ptr = this.wasm.exports.ghostty_wasm_alloc_u16_array(1);
+        try {
+            const result = this.wasm.exports.ghostty_terminal_get(this.ptr, id, ptr);
+            if (result !== C.SUCCESS) return 0;
+            return new DataView(this.wasm.buffer).getUint16(ptr, true);
+        } finally {
+            this.wasm.exports.ghostty_wasm_free_u16_array(ptr, 1);
         }
     }
 
@@ -259,12 +282,7 @@ export class Terminal {
     }
 
     formatHtml() {
-        let selPtr = 0;
-        try {
-            selPtr = this.#viewportSelection();
-        } catch (err) {
-            console.warn("viewport selection failed; formatting full screen", err);
-        }
+        const selPtr = this.#formatSelection();
         const { ptr: optsPtr, size: optsSize, view } = this.wasm.allocStruct("GhosttyFormatterTerminalOptions");
         this.wasm.setField(view, "GhosttyFormatterTerminalOptions", "size", optsSize);
         this.wasm.setField(view, "GhosttyFormatterTerminalOptions", "emit", C.FORMAT_HTML);
@@ -347,15 +365,27 @@ export class Terminal {
         return { ptr, size };
     }
 
-    #viewportSelection() {
-        const start = this.#gridRef(C.POINT_VIEWPORT, 0, 0);
-        const end = this.#gridRef(C.POINT_VIEWPORT, this.cols - 1, this.rows - 1);
-        const { ptr, size } = this.wasm.allocStruct("GhosttySelection");
+    #formatSelection() {
+        try {
+            return this.#areaSelection(C.POINT_VIEWPORT);
+        } catch (err) {
+            console.warn("viewport selection failed; using active area", err);
+            return this.#areaSelection(C.POINT_ACTIVE);
+        }
+    }
+
+    #areaSelection(tag) {
+        const cols = Math.max(1, this.cellCountData(C.DATA_COLS) || this.cols);
+        const rows = Math.max(1, this.cellCountData(C.DATA_ROWS) || this.rows);
+        const start = this.#gridRef(tag, 0, 0);
+        const end = this.#gridRef(tag, cols - 1, rows - 1);
+        const { ptr, size, view } = this.wasm.allocStruct("GhosttySelection");
         this.wasm.setU32(ptr, size);
         const startOff = this.wasm.field("GhosttySelection", "start").offset;
         const endOff = this.wasm.field("GhosttySelection", "end").offset;
         this.wasm.bytes(ptr + startOff, start.size).set(this.wasm.bytes(start.ptr, start.size));
         this.wasm.bytes(ptr + endOff, end.size).set(this.wasm.bytes(end.ptr, end.size));
+        this.wasm.setField(view, "GhosttySelection", "rectangle", 1);
         this.wasm.free(start.ptr, start.size);
         this.wasm.free(end.ptr, end.size);
         return ptr;

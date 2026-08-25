@@ -490,6 +490,8 @@ html, body {
     line-height: var(--cell-h);
     font-feature-settings: "calt" 0, "liga" 0;
     cursor: text;
+    user-select: text;
+    -webkit-user-select: text;
 }
 
 .screen-wrap:focus,
@@ -507,18 +509,24 @@ html, body {
     overflow: hidden;
     tab-size: 8;
     caret-color: transparent;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.screen .row {
+    box-sizing: border-box;
+    height: var(--cell-h);
+    line-height: var(--cell-h) !important;
+    overflow: hidden;
+    white-space: pre;
+    margin: 0;
+    padding: 0;
 }
 
 .screen,
 .screen * {
     font-family: inherit !important;
     font-size: inherit !important;
-    line-height: inherit !important;
-}
-
-.screen > div {
-    margin: 0;
-    white-space: pre;
 }
 
 .screen ::selection,
