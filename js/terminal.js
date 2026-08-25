@@ -124,9 +124,9 @@ export class Terminal {
         }
     }
 
-    write(bytes, followLive = null) {
+    write(bytes) {
         if (!bytes || !bytes.length) return;
-        const follow = followLive ?? this.viewportActive();
+        const follow = this.viewportActive();
         const ptr = this.wasm.alloc(bytes.length);
         this.wasm.bytes(ptr, bytes.length).set(bytes);
         this.wasm.exports.ghostty_terminal_vt_write(this.ptr, ptr, bytes.length);
@@ -155,13 +155,6 @@ export class Terminal {
         } finally {
             this.wasm.exports.ghostty_wasm_free_u8(ptr);
         }
-    }
-
-    /** True when the viewport is pinned to the live end of scrollback. */
-    pinnedBottom() {
-        const sb = this.scrollbar();
-        const maxOffset = Math.max(sb.total - sb.len, 0);
-        return sb.offset >= maxOffset;
     }
 
     scroll(tag, value = 0) {
@@ -288,8 +281,13 @@ export class Terminal {
         }
     }
 
-    formatHtml({ live = null } = {}) {
-        const selPtr = this.#formatSelection(live);
+    formatHtml() {
+        let selPtr = 0;
+        try {
+            selPtr = this.#viewportSelection();
+        } catch (err) {
+            console.warn("viewport selection failed; formatting full screen", err);
+        }
         const { ptr: optsPtr, size: optsSize, view } = this.wasm.allocStruct("GhosttyFormatterTerminalOptions");
         this.wasm.setField(view, "GhosttyFormatterTerminalOptions", "size", optsSize);
         this.wasm.setField(view, "GhosttyFormatterTerminalOptions", "emit", C.FORMAT_HTML);
@@ -372,24 +370,16 @@ export class Terminal {
         return { ptr, size };
     }
 
-    #formatSelection(live = null) {
-        // Prefer ACTIVE while following live output — more stable when
-        // scrollback is first created (e.g. git push on the last screen row).
-        const useActive = live != null ? live : (this.pinnedBottom() || this.viewportActive());
-        const tag = useActive ? C.POINT_ACTIVE : C.POINT_VIEWPORT;
-        try {
-            return this.#areaSelection(tag);
-        } catch (err) {
-            console.warn("viewport selection failed; using active area", err);
-            return this.#areaSelection(C.POINT_ACTIVE);
-        }
-    }
-
-    #areaSelection(tag) {
-        const cols = Math.max(1, this.cellCountData(C.DATA_COLS) || this.cols);
-        const rows = Math.max(1, this.cellCountData(C.DATA_ROWS) || this.rows);
-        const start = this.#gridRef(tag, 0, 0);
-        const end = this.#gridRef(tag, cols - 1, rows - 1);
+    #viewportSelection() {
+        // Prefer the JS grid (CSS/PTY), but never ask for cells beyond the
+        // live WASM size — that fails grid_ref and falls back to a full-screen
+        // dump that no longer matches the pane height.
+        const wasmCols = this.cellCountData(C.DATA_COLS) || this.cols;
+        const wasmRows = this.cellCountData(C.DATA_ROWS) || this.rows;
+        const cols = Math.max(1, Math.min(this.cols, wasmCols));
+        const rows = Math.max(1, Math.min(this.rows, wasmRows));
+        const start = this.#gridRef(C.POINT_VIEWPORT, 0, 0);
+        const end = this.#gridRef(C.POINT_VIEWPORT, cols - 1, rows - 1);
         const { ptr, size, view } = this.wasm.allocStruct("GhosttySelection");
         this.wasm.setU32(ptr, size);
         const startOff = this.wasm.field("GhosttySelection", "start").offset;

@@ -116,9 +116,7 @@ export function bindInput({ term, pty, screen, wrap, ui }) {
         }
 
         event.preventDefault();
-        // Do not jump-to-live on keypress while scrolled away. That caused a
-        // scrollbar flash (snap to bottom, then bounce back up). Keys still go
-        // to the PTY; scroll stays put until the user scrolls back themselves.
+        if (!ui.followLive || !term.viewportActive()) ui.jumpToLive();
         const action = event.repeat ? C.KEY_REPEAT : C.KEY_PRESS;
         const bytes = term.encodeKey(event, action, KEY_CODES[event.code] || 0);
         if (bytes) pty.send(bytes);
@@ -145,7 +143,6 @@ export function bindInput({ term, pty, screen, wrap, ui }) {
 
     wrap.addEventListener("wheel", (event) => {
         event.preventDefault();
-        if (ui.ignoreWheelUntil && performance.now() < ui.ignoreWheelUntil) return;
         if (isLive() && term.boolData(C.DATA_MOUSE_TRACKING) && !event.shiftKey) {
             sendMouse(
                 C.MOUSE_PRESS,

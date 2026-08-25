@@ -22,11 +22,8 @@ export class Chrome {
         this.renderQueued = false;
         this.selecting = false;
         this.pendingRender = false;
-        this.ignoreWheelUntil = 0;
-        this.lastHtmlSig = "";
         this.drag = null;
         this.lastScrollbar = { total: 24, offset: 0, len: 24 };
-        this.lastScrollTotal = 24;
 
         this.screen = pane.querySelector(".screen");
         this.wrap = pane.querySelector(".screen-wrap");
@@ -112,10 +109,7 @@ export class Chrome {
         this.followLive = true;
         this.selecting = false;
         this.pendingRender = false;
-        this.ignoreWheelUntil = performance.now() + 150;
-        if (!this.term.viewportActive()) this.term.scroll(C.SCROLL_BOTTOM);
-        this.lastHtmlSig = "";
-        this.lastScrollTotal = 0;
+        this.term.scroll(C.SCROLL_BOTTOM);
         this.render();
     }
 
@@ -154,7 +148,10 @@ export class Chrome {
     measureCells() {
         const probe = document.createElement("span");
         probe.textContent = "M".repeat(80);
-        probe.style.cssText = "position:absolute;left:0;top:0;visibility:hidden;white-space:pre;line-height:normal;";
+        // Measure the font's natural line box, not the current --cell-h, so
+        // metrics stay stable and rows fill the pane instead of leaving a gap.
+        probe.style.cssText =
+            "position:absolute;left:0;top:0;visibility:hidden;white-space:pre;line-height:normal;";
         this.wrap.appendChild(probe);
         const rect = probe.getBoundingClientRect();
         this.cellW = rect.width / 80 || 8;
@@ -164,13 +161,17 @@ export class Chrome {
         this._setVar("--cell-h", `${this.cellH}px`);
     }
 
-    resizeToFit() {
+    resizeToFit(force = false) {
         if (this.wrap.clientWidth < 16 || this.wrap.clientHeight < 16) return;
         const nextCols = Math.max(20, Math.floor((this.wrap.clientWidth - 16) / this.cellW));
         const nextRows = Math.max(8, Math.floor((this.wrap.clientHeight - 16) / this.cellH));
         this._setVar("--cols", String(nextCols));
         this._setVar("--rows", String(nextRows));
-        if (nextCols === this.cols && nextRows === this.rows) return;
+        const wasmCols = this.term.cellCountData(C.DATA_COLS) || this.cols;
+        const wasmRows = this.term.cellCountData(C.DATA_ROWS) || this.rows;
+        const outOfSync = wasmCols !== nextCols || wasmRows !== nextRows
+            || this.cols !== nextCols || this.rows !== nextRows;
+        if (!force && !outOfSync) return;
         this.cols = nextCols;
         this.rows = nextRows;
         this.term.resize(this.cols, this.rows, this.cellW, this.cellH);
@@ -238,49 +239,39 @@ export class Chrome {
             body = (scoped.slice(0, start) + scoped.slice(end + 8)).trim();
         }
 
+        // Unwrap the formatter's outer <div> and turn nested style wrappers
+        // into spans so each VT row is one block with a fixed cell height.
         let inner = body;
         const open = body.match(/^<div\b[^>]*>/i);
         if (open) {
             inner = body.slice(open[0].length);
             if (inner.endsWith("</div>")) inner = inner.slice(0, -"</div>".length);
         }
-
-        // Formatter emits nested <div style="display:inline"> runs. Keep them as
-        // spans so per-row block layout cannot inflate row height and clip the
-        // live bottom line once the screen is full.
         inner = inner
             .replace(/<div\b([^>]*)>/gi, "<span$1>")
             .replace(/<\/div>/gi, "</span>");
 
-        const sb = this.term.scrollbar();
-        // Match the CSS grid height (this.rows), not just the VT row count.
-        const vtRows = Math.max(1, this.rows);
-        const live = this.followLive || this.term.pinnedBottom() || this.term.viewportActive();
-
         let lines = inner.length ? inner.split("\n") : [];
-        // A trailing newline from the formatter becomes an extra empty row and
-        // shifts the live line out of the clipped viewport.
+        // Formatter trailing newline is not a real VT row.
         if (lines.length && lines[lines.length - 1] === "") lines.pop();
 
-        if (lines.length > vtRows) {
-            lines = live ? lines.slice(lines.length - vtRows) : lines.slice(0, vtRows);
+        // Always paint exactly this.rows cells so the last VT row is the
+        // last visual row. The HTML formatter strips trailing blanks; pad
+        // them back so vim/less/shell keep a full-height grid.
+        const rowCount = Math.max(1, this.rows);
+        if (lines.length > rowCount) {
+            // Viewport selection should already be rowCount lines. If we got
+            // a full scrollback dump, pin to the live end while following.
+            const live = this.followLive || this.term.viewportActive();
+            lines = live
+                ? lines.slice(lines.length - rowCount)
+                : lines.slice(0, rowCount);
         }
-        while (lines.length < vtRows) {
-            // When pinned to live, the formatter often omits the trailing empty
-            // row at the first scrollback line (e.g. git push from a full screen).
-            if (live) lines.push("");
-            else lines.unshift("");
-        }
+        while (lines.length < rowCount) lines.push("");
 
-        const next = lines.map((line) => `<div class="row">${line || "\u00a0"}</div>`).join("");
-        const force = sb.total !== this.lastScrollTotal;
-        this.lastScrollTotal = sb.total;
-        const sig = `${sb.total}:${sb.offset}:${live}:${next}`;
-        if (!force && sig === this.lastHtmlSig) return;
-        this.lastHtmlSig = sig;
-        this.screen.innerHTML = next;
-        this.screen.classList.toggle("follow-live", live);
-        // Always keep DOM scroll at top; row grid already maps 1:1 to the viewport.
+        this.screen.innerHTML = lines
+            .map((line) => `<div class="row">${line || "\u00a0"}</div>`)
+            .join("");
         this.screen.scrollTop = 0;
     }
 
@@ -289,17 +280,24 @@ export class Chrome {
         this.renderQueued = true;
         requestAnimationFrame(() => {
             this.renderQueued = false;
-            if (this.selecting || this.hasDomSelection()) {
+            if ((this.selecting || this.hasDomSelection()) && !this.followLive) {
                 this.pendingRender = true;
                 return;
             }
             try {
-                const live = this.followLive || this.term.pinnedBottom() || this.term.viewportActive();
-                if (this.followLive && !this.term.pinnedBottom()) {
-                    this.term.scroll(C.SCROLL_BOTTOM);
-                    this.lastHtmlSig = "";
+                // Keep WASM cols/rows locked to the visible CSS grid. A shorter
+                // VT grid is what put vim/less's last line in the middle of the pane.
+                const wasmCols = this.term.cellCountData(C.DATA_COLS);
+                const wasmRows = this.term.cellCountData(C.DATA_ROWS);
+                if ((wasmCols && wasmCols !== this.cols) || (wasmRows && wasmRows !== this.rows)) {
+                    this.cols = Math.max(20, this.cols);
+                    this.rows = Math.max(8, this.rows);
+                    this._setVar("--cols", String(this.cols));
+                    this._setVar("--rows", String(this.rows));
+                    this.term.resize(this.cols, this.rows, this.cellW, this.cellH);
+                    this.pty.resize(this.cols, this.rows);
                 }
-                this.applyHtml(this.term.formatHtml({ live }));
+                this.applyHtml(this.term.formatHtml());
                 this.updateColors();
                 if (this.pty.open) {
                     this.updateTitle();
@@ -337,9 +335,6 @@ export class Chrome {
         });
         this.track.addEventListener("wheel", (event) => {
             event.preventDefault();
-            if (this.ignoreWheelUntil && performance.now() < this.ignoreWheelUntil) return;
-            const maxOffset = Math.max(this.lastScrollbar.total - this.lastScrollbar.len, 0);
-            if (maxOffset === 0) return;
             this.followLive = false;
             const lines = Math.max(1, Math.round(Math.abs(event.deltaY) / 40));
             this.term.scroll(C.SCROLL_DELTA, event.deltaY < 0 ? -lines : lines);

@@ -1,4 +1,3 @@
-import * as C from "./constants.js";
 import { Terminal } from "./terminal.js";
 import { Pty } from "./pty.js";
 import { Chrome } from "./chrome.js";
@@ -26,7 +25,8 @@ export class Pane {
         this.pty.onOpen(() => {
             this.hadSession = true;
             this.term.reset();
-            this.pty.resize(this.ui.cols, this.ui.rows);
+            this.ui.measureCells();
+            this.ui.resizeToFit(true);
             this.ui.setDisconnected(false);
             this.ui.render();
             this.ui.screen.focus();
@@ -36,11 +36,7 @@ export class Pane {
             this.ui.render();
         });
         this.pty.onData((bytes) => {
-            this.term.write(bytes, this.ui.followLive);
-            // Re-assert live pin after writes that create scrollback (e.g. git
-            // push progress on the last screen row). Some VT updates can leave
-            // the viewport one row behind the active area.
-            if (this.ui.followLive) this.term.scroll(C.SCROLL_BOTTOM);
+            this.term.write(bytes);
             if (this.ui.active) this.ui.render();
             else this.dirty = true;
         });
