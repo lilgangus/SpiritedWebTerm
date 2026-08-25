@@ -1,10 +1,17 @@
 import * as C from "./constants.js";
 
-/** Window chrome: screen HTML, cursor, scrollbar, title, bell, cell metrics. */
+let nextScreenId = 1;
+
+/** Pane chrome: screen HTML, cursor, scrollbar, title, bell, cell metrics. */
 export class Chrome {
-    constructor({ term, pty }) {
+    constructor({ term, pty, pane, windowEl, tabEl }) {
         this.term = term;
         this.pty = pty;
+        this.pane = pane;
+        this.windowEl = windowEl;
+        this.tabEl = tabEl;
+        this.active = false;
+        this.windowFocused = false;
         this.followLive = true;
         this.fontSize = 13;
         this.cellW = 8;
@@ -15,14 +22,27 @@ export class Chrome {
         this.drag = null;
         this.lastScrollbar = { total: 24, offset: 0, len: 24 };
 
-        this.screen = document.getElementById("screen");
-        this.wrap = document.getElementById("screen-wrap");
-        this.cursorEl = document.getElementById("cursor");
-        this.thumb = document.getElementById("thumb");
-        this.track = document.getElementById("scrollbar");
-        this.paletteStyle = document.getElementById("vt-palette");
-        this.overlay = document.getElementById("session-overlay");
-        this.openButton = document.getElementById("open-session");
+        this.screen = pane.querySelector(".screen");
+        this.wrap = pane.querySelector(".screen-wrap");
+        this.cursorEl = pane.querySelector(".cursor");
+        this.thumb = pane.querySelector(".thumb");
+        this.track = pane.querySelector(".scrollbar");
+        this.paletteStyle = pane.querySelector(".vt-palette");
+        this.overlay = pane.querySelector(".session-overlay");
+        this.openButton = pane.querySelector(".open-session");
+        this.bellEl = pane.querySelector(".bell");
+        this.tabLabel = tabEl.querySelector(".tab-label");
+        this.titleEl = windowEl.querySelector(".win-title");
+
+        this.screen.id = `screen-${nextScreenId++}`;
+        this._setVar("--font-size", `${this.fontSize}px`);
+    }
+
+    _setVar(name, value) {
+        this.pane.style.setProperty(name, value);
+        if (this.active && (name === "--bg" || name === "--fg" || name === "--cursor")) {
+            this.windowEl.style.setProperty(name, value);
+        }
     }
 
     setDisconnected(disconnected, hadSession = false) {
@@ -31,11 +51,13 @@ export class Chrome {
         if (disconnected) {
             this.cursorEl.classList.remove("visible");
             const label = hadSession ? "Disconnected" : "Ghostty";
-            document.getElementById("tab").textContent = label;
-            document.getElementById("title").textContent = label;
-            document.title = label;
+            this.tabLabel.textContent = label;
+            if (this.active) {
+                this.titleEl.textContent = label;
+                if (this.windowFocused) document.title = label;
+            }
             this.openButton.disabled = false;
-            this.openButton.focus();
+            if (this.active) this.openButton.focus();
         }
     }
 
@@ -48,7 +70,7 @@ export class Chrome {
         const next = kind === "inc" ? this.fontSize + 1
             : kind === "dec" ? this.fontSize - 1 : 13;
         this.fontSize = Math.max(8, Math.min(32, next));
-        document.documentElement.style.setProperty("--font-size", `${this.fontSize}px`);
+        this._setVar("--font-size", `${this.fontSize}px`);
         this.measureCells();
         this.resizeToFit();
     }
@@ -67,15 +89,16 @@ export class Chrome {
         this.cellW = rect.width / 80 || 8;
         this.cellH = rect.height || this.fontSize * 1.35;
         this.wrap.removeChild(probe);
-        document.documentElement.style.setProperty("--cell-w", `${this.cellW}px`);
-        document.documentElement.style.setProperty("--cell-h", `${this.cellH}px`);
+        this._setVar("--cell-w", `${this.cellW}px`);
+        this._setVar("--cell-h", `${this.cellH}px`);
     }
 
     resizeToFit() {
+        if (this.wrap.clientWidth < 16 || this.wrap.clientHeight < 16) return;
         const nextCols = Math.max(20, Math.floor((this.wrap.clientWidth - 16) / this.cellW));
         const nextRows = Math.max(8, Math.floor((this.wrap.clientHeight - 16) / this.cellH));
-        document.documentElement.style.setProperty("--cols", String(nextCols));
-        document.documentElement.style.setProperty("--rows", String(nextRows));
+        this._setVar("--cols", String(nextCols));
+        this._setVar("--rows", String(nextRows));
         if (nextCols === this.cols && nextRows === this.rows) return;
         this.cols = nextCols;
         this.rows = nextRows;
@@ -85,26 +108,25 @@ export class Chrome {
     }
 
     flashBell() {
-        const el = document.getElementById("bell");
-        el.classList.add("on");
-        setTimeout(() => el.classList.remove("on"), 90);
+        this.bellEl.classList.add("on");
+        setTimeout(() => this.bellEl.classList.remove("on"), 90);
     }
 
     updateTitle() {
         const title = this.term.title();
-        document.getElementById("tab").textContent = title;
-        document.getElementById("title").textContent = title;
-        document.title = title;
+        this.tabLabel.textContent = title;
+        if (!this.active) return;
+        this.titleEl.textContent = title;
+        if (this.windowFocused) document.title = title;
     }
 
     updateColors() {
         const bg = this.term.rgb(C.DATA_COLOR_BG) || { r: 0x28, g: 0x2c, b: 0x34 };
         const fg = this.term.rgb(C.DATA_COLOR_FG) || { r: 0xff, g: 0xff, b: 0xff };
         const cursor = this.term.rgb(C.DATA_COLOR_CURSOR) || fg;
-        const root = document.documentElement.style;
-        root.setProperty("--bg", `rgb(${bg.r}, ${bg.g}, ${bg.b})`);
-        root.setProperty("--fg", `rgb(${fg.r}, ${fg.g}, ${fg.b})`);
-        root.setProperty("--cursor", `rgb(${cursor.r}, ${cursor.g}, ${cursor.b})`);
+        this._setVar("--bg", `rgb(${bg.r}, ${bg.g}, ${bg.b})`);
+        this._setVar("--fg", `rgb(${fg.r}, ${fg.g}, ${fg.b})`);
+        this._setVar("--cursor", `rgb(${cursor.r}, ${cursor.g}, ${cursor.b})`);
     }
 
     updateCursor(cursor) {
@@ -136,7 +158,7 @@ export class Chrome {
     }
 
     applyHtml(html) {
-        const scoped = html.replaceAll(":root", "#screen");
+        const scoped = html.replaceAll(":root", `#${this.screen.id}`);
         const start = scoped.indexOf("<style>");
         const end = scoped.indexOf("</style>");
         let body = scoped;
@@ -145,8 +167,6 @@ export class Chrome {
             body = (scoped.slice(0, start) + scoped.slice(end + 8)).trim();
         }
         this.screen.innerHTML = body;
-        // If HTML is taller than the viewport (full scrollback dump, extra
-        // newline, leftover style), show the live bottom — not the oldest rows.
         if (this.term.viewportActive()) {
             this.screen.scrollTop = this.screen.scrollHeight;
         } else {

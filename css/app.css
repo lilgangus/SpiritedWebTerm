@@ -14,91 +14,303 @@
 html, body {
     margin: 0;
     height: 100%;
+    overflow: hidden;
     background: #161618;
     color: var(--fg);
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
 }
 
-body {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
 #desktop {
-    width: min(1100px, calc(100vw - 48px));
-    height: min(720px, calc(100vh - 48px));
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background:
+        radial-gradient(1200px 700px at 50% -10%, rgba(255, 255, 255, 0.04), transparent 55%),
+        #161618;
 }
 
-#window {
-    height: 100%;
+#snap-preview {
+    position: absolute;
+    pointer-events: none;
+    box-sizing: border-box;
+    border-radius: 10px;
+    background: rgba(90, 140, 255, 0.16);
+    box-shadow: inset 0 0 0 2px rgba(140, 180, 255, 0.55);
+    opacity: 0;
+    z-index: 10000;
+    transition: opacity 80ms ease;
+}
+
+#snap-preview.on {
+    opacity: 1;
+}
+
+#desktop-new {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 3;
+    appearance: none;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 8px;
+    padding: 10px 18px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.92);
+    font: 590 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    cursor: pointer;
+}
+
+#desktop-new:hover {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+#desktop-new[hidden] {
+    display: none !important;
+}
+
+.window {
+    position: absolute;
     display: flex;
     flex-direction: column;
+    min-width: 360px;
+    min-height: 220px;
     background: var(--bg);
     border-radius: 10px;
     box-shadow:
         0 0 0 1px rgba(255, 255, 255, 0.08),
-        0 24px 80px rgba(0, 0, 0, 0.55);
+        0 18px 50px rgba(0, 0, 0, 0.45);
+    overflow: visible;
+    color: var(--fg);
+}
+
+.window.focused {
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.14),
+        0 28px 80px rgba(0, 0, 0, 0.62);
+}
+
+.window.dragging {
+    opacity: 0.96;
+    cursor: grabbing;
+}
+
+.window.minimized {
+    min-height: 38px;
+    height: 38px !important;
+}
+
+.window.minimized .panes,
+.window.minimized .resize-grip,
+.window.minimized .menu {
+    display: none;
+}
+
+.titlebar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 38px;
+    padding: 0 10px;
+    flex: 0 0 38px;
+    border-radius: 10px 10px 0 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent);
+    user-select: none;
+    cursor: grab;
+    touch-action: none;
+}
+
+.window.dragging .titlebar {
+    cursor: grabbing;
+}
+
+.traffic {
+    display: flex;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
+.tl {
+    width: 12px;
+    height: 12px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.tl.close { background: #ff5f57; }
+.tl.min { background: #febc2e; }
+.tl.max { background: #28c840; }
+
+.window:not(.focused) .tl {
+    background: rgba(255, 255, 255, 0.22);
+}
+
+.tabs {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
     overflow: hidden;
 }
 
-#titlebar {
+.tab {
+    appearance: none;
     display: flex;
     align-items: center;
-    gap: 12px;
-    height: 38px;
-    padding: 0 12px;
-    flex: 0 0 38px;
-    background: linear-gradient(180deg, rgba(255,255,255,0.045), transparent);
-    user-select: none;
-}
-
-#traffic {
-    display: flex;
-    gap: 8px;
-}
-
-#traffic span {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-}
-
-#traffic .close { background: #ff5f57; }
-#traffic .min { background: #febc2e; }
-#traffic .max { background: #28c840; }
-
-#tab {
+    gap: 6px;
+    max-width: 180px;
     height: 26px;
-    max-width: 46%;
-    padding: 0 12px;
+    padding: 0 8px 0 10px;
+    border: none;
     border-radius: 6px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.62);
+    font: 12px/26px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.tab.active {
     background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.88);
-    font-size: 12px;
-    line-height: 26px;
+    color: rgba(255, 255, 255, 0.92);
+}
+
+.tab-label {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-#title {
-    flex: 1;
-    text-align: center;
-    font-size: 13px;
-    font-weight: 590;
-    color: rgba(255, 255, 255, 0.72);
+.tab-close {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 12px;
+    color: rgba(255, 255, 255, 0.7);
 }
 
-#term {
+.tab-close:hover {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.tab-close[hidden] {
+    display: none !important;
+}
+
+.plus-wrap,
+.snap-wrap {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+.plus,
+.snap-btn {
+    appearance: none;
+    flex: 0 0 auto;
+    height: 22px;
+    border: none;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.88);
+    cursor: pointer;
+}
+
+.plus {
+    width: 22px;
+    font: 16px/22px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+}
+
+.snap-btn {
+    padding: 0 8px;
+    font: 590 11px/22px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+}
+
+.plus:hover,
+.snap-btn:hover {
+    background: rgba(255, 255, 255, 0.14);
+}
+
+.win-title {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 590;
+    color: rgba(255, 255, 255, 0.55);
+    pointer-events: none;
+}
+
+.menu {
+    position: absolute;
+    top: 36px;
+    z-index: 30;
+    min-width: 168px;
+    padding: 4px;
+    border-radius: 8px;
+    background: #2c2c2e;
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.08),
+        0 12px 40px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+}
+
+.menu[hidden] {
+    display: none !important;
+}
+
+.plus-menu { left: 0; }
+.snap-menu { right: 0; }
+
+.menu button {
+    appearance: none;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 10px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.92);
+    text-align: left;
+    font: 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    cursor: pointer;
+}
+
+.menu button:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.panes {
+    position: relative;
     flex: 1;
     min-height: 0;
-    display: flex;
-    position: relative;
     background: var(--bg);
+    overflow: hidden;
+    border-radius: 0 0 10px 10px;
 }
 
-#screen-wrap {
+.pane {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    visibility: hidden;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.pane.active {
+    visibility: visible;
+    pointer-events: auto;
+    z-index: 1;
+}
+
+.screen-wrap {
     position: relative;
     flex: 1;
     min-width: 0;
@@ -111,9 +323,12 @@ body {
     cursor: text;
 }
 
-#screen-wrap:focus, #screen:focus { outline: none; }
+.screen-wrap:focus,
+.screen:focus {
+    outline: none;
+}
 
-#screen {
+.screen {
     margin: 0;
     padding: 0;
     width: calc(var(--cols) * var(--cell-w));
@@ -125,23 +340,25 @@ body {
     caret-color: transparent;
 }
 
-#screen, #screen * {
+.screen,
+.screen * {
     font-family: inherit !important;
     font-size: inherit !important;
     line-height: inherit !important;
 }
 
-#screen > div {
+.screen > div {
     margin: 0;
     white-space: pre;
 }
 
-#screen ::selection, #screen-wrap ::selection {
+.screen ::selection,
+.screen-wrap ::selection {
     background: var(--fg);
     color: var(--bg);
 }
 
-#cursor {
+.cursor {
     position: absolute;
     left: var(--pad-x);
     top: var(--pad-y);
@@ -155,15 +372,15 @@ body {
     mix-blend-mode: difference;
 }
 
-#cursor.visible { display: block; }
-#cursor.blink { animation: cursor-blink 1.06s step-end infinite; }
-#cursor.blink-reset { animation: none; }
+.cursor.visible { display: block; }
+.cursor.blink { animation: cursor-blink 1.06s step-end infinite; }
+.cursor.blink-reset { animation: none; }
 
 @keyframes cursor-blink {
     50% { background: transparent; }
 }
 
-#scrollbar {
+.scrollbar {
     position: relative;
     width: 11px;
     flex: 0 0 11px;
@@ -171,7 +388,7 @@ body {
     user-select: none;
 }
 
-#thumb {
+.thumb {
     position: absolute;
     left: 3px;
     right: 2px;
@@ -181,9 +398,12 @@ body {
     border-radius: 4px;
 }
 
-#thumb:hover, #thumb.dragging { background: rgba(255, 255, 255, 0.45); }
+.thumb:hover,
+.thumb.dragging {
+    background: rgba(255, 255, 255, 0.45);
+}
 
-#bell {
+.bell {
     position: absolute;
     inset: 0;
     pointer-events: none;
@@ -192,9 +412,9 @@ body {
     z-index: 3;
 }
 
-#bell.on { opacity: 1; }
+.bell.on { opacity: 1; }
 
-#session-overlay {
+.session-overlay {
     position: absolute;
     inset: 0;
     z-index: 4;
@@ -204,9 +424,9 @@ body {
     background: rgba(16, 16, 18, 0.55);
 }
 
-#session-overlay.hidden { display: none; }
+.session-overlay.hidden { display: none; }
 
-#open-session {
+.open-session {
     appearance: none;
     border: 1px solid rgba(255, 255, 255, 0.16);
     border-radius: 8px;
@@ -217,18 +437,33 @@ body {
     cursor: pointer;
 }
 
-#open-session:hover:not(:disabled) {
+.open-session:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.14);
 }
 
-#open-session:disabled {
+.open-session:disabled {
     opacity: 0.6;
     cursor: default;
 }
 
+.resize-grip {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 14px;
+    height: 14px;
+    cursor: nwse-resize;
+    z-index: 6;
+    touch-action: none;
+}
+
 #boot-error {
-    display: none;
-    margin: 16px;
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    z-index: 100;
+    margin: 0;
     padding: 12px 14px;
     border-radius: 8px;
     background: #3b1d1d;
@@ -237,5 +472,6 @@ body {
     white-space: pre-wrap;
 }
 
-#window.error #boot-error { display: block; }
-#window.error #term { display: none; }
+#boot-error[hidden] {
+    display: none !important;
+}

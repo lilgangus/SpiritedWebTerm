@@ -8,33 +8,69 @@
 </head>
 <body>
     <div id="desktop">
-        <div id="window">
-            <div id="titlebar">
-                <div id="traffic" aria-hidden="true">
-                    <span class="close"></span>
-                    <span class="min"></span>
-                    <span class="max"></span>
-                </div>
-                <div id="tab">Ghostty</div>
-                <div id="title">Ghostty</div>
-            </div>
-            <div id="term">
-                <div id="screen-wrap">
-                    <div id="screen" tabindex="0" role="application" aria-label="Terminal"></div>
-                    <div id="cursor" aria-hidden="true"></div>
-                    <div id="bell" aria-hidden="true"></div>
-                </div>
-                <div id="scrollbar" title="Scrollback" aria-label="Scrollback" role="scrollbar">
-                    <div id="thumb"></div>
-                </div>
-                <div id="session-overlay">
-                    <button type="button" id="open-session">Open Terminal</button>
-                </div>
-            </div>
-            <pre id="boot-error"></pre>
-        </div>
+        <div id="snap-preview" aria-hidden="true"></div>
+        <button type="button" id="desktop-new" hidden>New Window</button>
     </div>
-    <style id="vt-palette"></style>
+    <pre id="boot-error" hidden></pre>
+
+    <template id="window-template">
+        <div class="window">
+            <div class="titlebar">
+                <div class="traffic" aria-hidden="true">
+                    <button type="button" class="tl close" title="Close"></button>
+                    <button type="button" class="tl min" title="Minimize"></button>
+                    <button type="button" class="tl max" title="Maximize"></button>
+                </div>
+                <div class="tabs"></div>
+                <div class="plus-wrap">
+                    <button type="button" class="plus" title="New terminal" aria-label="New terminal">+</button>
+                    <div class="menu plus-menu" hidden>
+                        <button type="button" data-kind="tab">New Tab</button>
+                        <button type="button" data-kind="window">New Window</button>
+                    </div>
+                </div>
+                <div class="win-title">Ghostty</div>
+                <div class="snap-wrap">
+                    <button type="button" class="snap-btn" title="Snap window" aria-label="Snap window">Snap</button>
+                    <div class="menu snap-menu" hidden>
+                        <button type="button" data-snap="left">Left</button>
+                        <button type="button" data-snap="right">Right</button>
+                        <button type="button" data-snap="top-left">Top left</button>
+                        <button type="button" data-snap="top-right">Top right</button>
+                        <button type="button" data-snap="bottom-left">Bottom left</button>
+                        <button type="button" data-snap="bottom-right">Bottom right</button>
+                    </div>
+                </div>
+            </div>
+            <div class="panes"></div>
+            <div class="resize-grip" aria-hidden="true"></div>
+        </div>
+    </template>
+
+    <template id="tab-template">
+        <button type="button" class="tab">
+            <span class="tab-label">Ghostty</span>
+            <span class="tab-close" title="Close tab" aria-label="Close tab">×</span>
+        </button>
+    </template>
+
+    <template id="pane-template">
+        <div class="pane">
+            <div class="screen-wrap">
+                <div class="screen" tabindex="0" role="application" aria-label="Terminal"></div>
+                <div class="cursor" aria-hidden="true"></div>
+                <div class="bell" aria-hidden="true"></div>
+            </div>
+            <div class="scrollbar" title="Scrollback" aria-label="Scrollback" role="scrollbar">
+                <div class="thumb"></div>
+            </div>
+            <div class="session-overlay">
+                <button type="button" class="open-session">Open Terminal</button>
+            </div>
+            <style class="vt-palette"></style>
+        </div>
+    </template>
+
     <script type="module" src="/js/main.js"></script>
 </body>
 </html>

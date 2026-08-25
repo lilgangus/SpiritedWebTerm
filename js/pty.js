@@ -60,4 +60,9 @@ export class Pty {
         if (!this.open) return;
         this.ws.send(`resize ${cols} ${rows}`);
     }
+
+    close() {
+        if (!this.ws) return;
+        this.ws.close();
+    }
 }
