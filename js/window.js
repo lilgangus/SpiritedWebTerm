@@ -86,7 +86,6 @@ export class TermWindow {
         });
         this.panes.push(pane);
         this.showPane(pane);
-        this.#syncTabClose();
         requestAnimationFrame(() => {
             this.tabsEl.scrollLeft = this.tabsEl.scrollWidth;
             this.layout();
@@ -103,7 +102,6 @@ export class TermWindow {
         const before = this.panes[at + 1]?.tabEl || this.tabAddBtn;
         this.tabsEl.insertBefore(pane.tabEl, before);
         this.showPane(pane);
-        this.#syncTabClose();
         requestAnimationFrame(() => {
             pane.tabEl.scrollIntoView({ inline: "nearest", block: "nearest" });
             this.layout();
@@ -121,7 +119,6 @@ export class TermWindow {
         if (this.panes.length) {
             this.showPane(this.panes[Math.min(index, this.panes.length - 1)]);
         }
-        this.#syncTabClose();
         return index;
     }
 
@@ -135,7 +132,6 @@ export class TermWindow {
         this.panes.splice(to, 0, pane);
         const before = this.panes[to + 1]?.tabEl || this.tabAddBtn;
         this.tabsEl.insertBefore(pane.tabEl, before);
-        this.#syncTabClose();
     }
 
     showPane(pane) {
@@ -156,7 +152,6 @@ export class TermWindow {
         pane.dispose();
         this.panes.splice(index, 1);
         this.showPane(this.panes[Math.max(0, index - 1)]);
-        this.#syncTabClose();
     }
 
     closeIfEmpty() {
@@ -214,13 +209,6 @@ export class TermWindow {
             h: desk.h - GAP_MAX * 2,
         });
         this.#syncMaxMenuLabel();
-    }
-
-    #syncTabClose() {
-        const many = this.panes.length > 1;
-        for (const pane of this.panes) {
-            pane.tabEl.querySelector(".tab-close").hidden = !many;
-        }
     }
 
     hideMenus() {

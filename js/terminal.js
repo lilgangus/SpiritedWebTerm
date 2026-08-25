@@ -157,6 +157,13 @@ export class Terminal {
         }
     }
 
+    /** True when the viewport is pinned to the live end of scrollback. */
+    pinnedBottom() {
+        const sb = this.scrollbar();
+        const maxOffset = Math.max(sb.total - sb.len, 0);
+        return sb.offset >= maxOffset;
+    }
+
     scroll(tag, value = 0) {
         const { ptr, size, view } = this.wasm.allocStruct("GhosttyTerminalScrollViewport");
         view.setUint32(0, tag, true);
@@ -281,8 +288,8 @@ export class Terminal {
         }
     }
 
-    formatHtml() {
-        const selPtr = this.#formatSelection();
+    formatHtml({ live = null } = {}) {
+        const selPtr = this.#formatSelection(live);
         const { ptr: optsPtr, size: optsSize, view } = this.wasm.allocStruct("GhosttyFormatterTerminalOptions");
         this.wasm.setField(view, "GhosttyFormatterTerminalOptions", "size", optsSize);
         this.wasm.setField(view, "GhosttyFormatterTerminalOptions", "emit", C.FORMAT_HTML);
@@ -365,9 +372,13 @@ export class Terminal {
         return { ptr, size };
     }
 
-    #formatSelection() {
+    #formatSelection(live = null) {
+        // Prefer ACTIVE while following live output — more stable when
+        // scrollback is first created (e.g. git push on the last screen row).
+        const useActive = live != null ? live : (this.pinnedBottom() || this.viewportActive());
+        const tag = useActive ? C.POINT_ACTIVE : C.POINT_VIEWPORT;
         try {
-            return this.#areaSelection(C.POINT_VIEWPORT);
+            return this.#areaSelection(tag);
         } catch (err) {
             console.warn("viewport selection failed; using active area", err);
             return this.#areaSelection(C.POINT_ACTIVE);

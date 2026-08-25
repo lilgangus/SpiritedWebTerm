@@ -26,6 +26,7 @@ export class Chrome {
         this.lastHtmlSig = "";
         this.drag = null;
         this.lastScrollbar = { total: 24, offset: 0, len: 24 };
+        this.lastScrollTotal = 24;
 
         this.screen = pane.querySelector(".screen");
         this.wrap = pane.querySelector(".screen-wrap");
@@ -114,6 +115,7 @@ export class Chrome {
         this.ignoreWheelUntil = performance.now() + 150;
         if (!this.term.viewportActive()) this.term.scroll(C.SCROLL_BOTTOM);
         this.lastHtmlSig = "";
+        this.lastScrollTotal = 0;
         this.render();
     }
 
@@ -243,23 +245,43 @@ export class Chrome {
             if (inner.endsWith("</div>")) inner = inner.slice(0, -"</div>".length);
         }
 
-        let lines = inner.length ? inner.split("\n") : [];
-        if (lines.length > this.rows) {
-            lines = (this.followLive || this.term.viewportActive())
-                ? lines.slice(lines.length - this.rows)
-                : lines.slice(0, this.rows);
-        }
-        while (lines.length < this.rows) lines.push("");
+        // Formatter emits nested <div style="display:inline"> runs. Keep them as
+        // spans so per-row block layout cannot inflate row height and clip the
+        // live bottom line once the screen is full.
+        inner = inner
+            .replace(/<div\b([^>]*)>/gi, "<span$1>")
+            .replace(/<\/div>/gi, "</span>");
 
-        const next = lines.map((line) => `<div class="row">${line}</div>`).join("");
-        if (next === this.lastHtmlSig) return;
-        this.lastHtmlSig = next;
-        this.screen.innerHTML = next;
-        if (this.followLive || this.term.viewportActive()) {
-            this.screen.scrollTop = this.screen.scrollHeight;
-        } else {
-            this.screen.scrollTop = 0;
+        const sb = this.term.scrollbar();
+        // Match the CSS grid height (this.rows), not just the VT row count.
+        const vtRows = Math.max(1, this.rows);
+        const live = this.followLive || this.term.pinnedBottom() || this.term.viewportActive();
+
+        let lines = inner.length ? inner.split("\n") : [];
+        // A trailing newline from the formatter becomes an extra empty row and
+        // shifts the live line out of the clipped viewport.
+        if (lines.length && lines[lines.length - 1] === "") lines.pop();
+
+        if (lines.length > vtRows) {
+            lines = live ? lines.slice(lines.length - vtRows) : lines.slice(0, vtRows);
         }
+        while (lines.length < vtRows) {
+            // When pinned to live, the formatter often omits the trailing empty
+            // row at the first scrollback line (e.g. git push from a full screen).
+            if (live) lines.push("");
+            else lines.unshift("");
+        }
+
+        const next = lines.map((line) => `<div class="row">${line || "\u00a0"}</div>`).join("");
+        const force = sb.total !== this.lastScrollTotal;
+        this.lastScrollTotal = sb.total;
+        const sig = `${sb.total}:${sb.offset}:${live}:${next}`;
+        if (!force && sig === this.lastHtmlSig) return;
+        this.lastHtmlSig = sig;
+        this.screen.innerHTML = next;
+        this.screen.classList.toggle("follow-live", live);
+        // Always keep DOM scroll at top; row grid already maps 1:1 to the viewport.
+        this.screen.scrollTop = 0;
     }
 
     render() {
@@ -272,7 +294,12 @@ export class Chrome {
                 return;
             }
             try {
-                this.applyHtml(this.term.formatHtml());
+                const live = this.followLive || this.term.pinnedBottom() || this.term.viewportActive();
+                if (this.followLive && !this.term.pinnedBottom()) {
+                    this.term.scroll(C.SCROLL_BOTTOM);
+                    this.lastHtmlSig = "";
+                }
+                this.applyHtml(this.term.formatHtml({ live }));
                 this.updateColors();
                 if (this.pty.open) {
                     this.updateTitle();
@@ -311,6 +338,8 @@ export class Chrome {
         this.track.addEventListener("wheel", (event) => {
             event.preventDefault();
             if (this.ignoreWheelUntil && performance.now() < this.ignoreWheelUntil) return;
+            const maxOffset = Math.max(this.lastScrollbar.total - this.lastScrollbar.len, 0);
+            if (maxOffset === 0) return;
             this.followLive = false;
             const lines = Math.max(1, Math.round(Math.abs(event.deltaY) / 40));
             this.term.scroll(C.SCROLL_DELTA, event.deltaY < 0 ? -lines : lines);

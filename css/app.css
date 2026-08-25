@@ -511,16 +511,30 @@ html, body {
     caret-color: transparent;
     user-select: text;
     -webkit-user-select: text;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
 }
 
 .screen .row {
     box-sizing: border-box;
+    flex: 0 0 var(--cell-h);
     height: var(--cell-h);
+    min-height: var(--cell-h);
+    max-height: var(--cell-h);
     line-height: var(--cell-h) !important;
     overflow: hidden;
     white-space: pre;
     margin: 0;
     padding: 0;
+}
+
+.screen .row > span {
+    display: inline;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    line-height: inherit !important;
 }
 
 .screen,

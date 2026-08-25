@@ -36,8 +36,11 @@ export class Pane {
             this.ui.render();
         });
         this.pty.onData((bytes) => {
-            if (this.ui.followLive) this.term.scroll(C.SCROLL_BOTTOM);
             this.term.write(bytes, this.ui.followLive);
+            // Re-assert live pin after writes that create scrollback (e.g. git
+            // push progress on the last screen row). Some VT updates can leave
+            // the viewport one row behind the active area.
+            if (this.ui.followLive) this.term.scroll(C.SCROLL_BOTTOM);
             if (this.ui.active) this.ui.render();
             else this.dirty = true;
         });

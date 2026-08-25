@@ -154,6 +154,9 @@ export function bindInput({ term, pty, screen, wrap, ui }) {
             );
             return;
         }
+        const sb = term.scrollbar();
+        const maxOffset = Math.max(sb.total - sb.len, 0);
+        if (maxOffset === 0) return;
         ui.followLive = false;
         const lines = Math.max(1, Math.round(Math.abs(event.deltaY) / 40));
         term.scroll(C.SCROLL_DELTA, event.deltaY < 0 ? -lines : lines);
