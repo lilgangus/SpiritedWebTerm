@@ -25,10 +25,20 @@
                             <button type="button" data-snap="max">Full Screen</button>
                             <button type="button" data-snap="left">Left</button>
                             <button type="button" data-snap="right">Right</button>
-                            <button type="button" data-snap="top-left">Top left</button>
-                            <button type="button" data-snap="top-right">Top right</button>
-                            <button type="button" data-snap="bottom-left">Bottom left</button>
-                            <button type="button" data-snap="bottom-right">Bottom right</button>
+                            <div class="menu-item has-submenu">
+                                <button type="button" data-snap="top">Top</button>
+                                <div class="menu submenu" role="menu">
+                                    <button type="button" data-snap="top-left">Top left</button>
+                                    <button type="button" data-snap="top-right">Top right</button>
+                                </div>
+                            </div>
+                            <div class="menu-item has-submenu">
+                                <button type="button" data-snap="bottom">Bottom</button>
+                                <div class="menu submenu" role="menu">
+                                    <button type="button" data-snap="bottom-left">Bottom left</button>
+                                    <button type="button" data-snap="bottom-right">Bottom right</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

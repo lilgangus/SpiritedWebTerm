@@ -20,6 +20,7 @@ export class TermWindow {
         this.panesEl = this.el.querySelector(".panes");
         this.plusBtn = this.el.querySelector(".plus");
         this.maxMenu = this.el.querySelector(".max-menu");
+        this.maxActionBtn = this.maxMenu.querySelector('[data-snap="max"]');
         this.grip = this.el.querySelector(".resize-grip");
 
         desktop.el.appendChild(this.el);
@@ -30,6 +31,7 @@ export class TermWindow {
         this._ro = new ResizeObserver(() => this.layout());
         this._ro.observe(this.el);
         requestAnimationFrame(() => this.layout());
+        this.#syncMaxMenuLabel();
     }
 
     get bounds() {
@@ -177,6 +179,7 @@ export class TermWindow {
         this.snapped = kind;
         this.el.classList.toggle("maximized", false);
         this.setBounds(rect);
+        this.#syncMaxMenuLabel();
     }
 
     relayout() {
@@ -199,6 +202,7 @@ export class TermWindow {
             this.snapped = null;
             this.el.classList.remove("maximized");
             this.setBounds(prev);
+            this.#syncMaxMenuLabel();
             return;
         }
         if (!this.snapped) this.restoreBounds = this.bounds;
@@ -209,6 +213,7 @@ export class TermWindow {
             w: desk.w - GAP_MAX * 2,
             h: desk.h - GAP_MAX * 2,
         });
+        this.#syncMaxMenuLabel();
     }
 
     #syncTabClose() {
@@ -229,6 +234,13 @@ export class TermWindow {
 
     #paneFromTab(tabEl) {
         return this.panes.find((pane) => pane.tabEl === tabEl) || null;
+    }
+
+    #syncMaxMenuLabel() {
+        if (!this.maxActionBtn) return;
+        this.maxActionBtn.textContent = this.snapped === "max"
+            ? "Exit Full Screen"
+            : "Full Screen";
     }
 
     #bindChrome() {
@@ -283,6 +295,7 @@ export class TermWindow {
         });
         this.el.querySelector(".max").addEventListener("click", (event) => {
             event.stopPropagation();
+            this.#syncMaxMenuLabel();
             this.maxMenu.hidden = !this.maxMenu.hidden;
         });
         this.maxMenu.addEventListener("click", (event) => {

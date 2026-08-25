@@ -143,7 +143,57 @@ html, body {
     padding: 0;
     border: none;
     border-radius: 50%;
+    position: relative;
     cursor: pointer;
+}
+
+.tl::before,
+.tl::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    background: rgba(0, 0, 0, 0.58);
+    border-radius: 999px;
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+
+.traffic:hover .tl::before,
+.traffic:hover .tl::after,
+.tl:hover::before,
+.tl:hover::after,
+.tl:focus-visible::before,
+.tl:focus-visible::after {
+    opacity: 0.78;
+}
+
+.tl.close::before {
+    width: 7px;
+    height: 1.5px;
+    transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.tl.close::after {
+    width: 7px;
+    height: 1.5px;
+    transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.tl.min::before {
+    width: 7px;
+    height: 1.5px;
+}
+
+.tl.max::before {
+    width: 7px;
+    height: 1.5px;
+}
+
+.tl.max::after {
+    width: 1.5px;
+    height: 7px;
 }
 
 .tl.close { background: #ff5f57; }
@@ -355,8 +405,41 @@ html, body {
 
 .max-menu { left: 0; }
 
+.menu-item {
+    position: relative;
+}
+
+.menu-item.has-submenu > button {
+    padding-right: 22px;
+}
+
+.menu-item.has-submenu > button::after {
+    content: "›";
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 14px;
+    line-height: 1;
+}
+
+.submenu {
+    top: 0;
+    left: calc(100% - 2px);
+    min-width: 140px;
+    display: none;
+}
+
+.menu-item.has-submenu:hover > .submenu,
+.menu-item.has-submenu:focus-within > .submenu {
+    display: flex;
+}
+
 .menu button {
     appearance: none;
+    position: relative;
+    width: 100%;
     border: none;
     border-radius: 6px;
     padding: 8px 10px;
@@ -367,7 +450,8 @@ html, body {
     cursor: pointer;
 }
 
-.menu button:hover {
+.menu button:hover,
+.menu-item.has-submenu:hover > button {
     background: rgba(255, 255, 255, 0.1);
 }
 

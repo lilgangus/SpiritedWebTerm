@@ -10,7 +10,7 @@ and then to the PTY.
 - Floating windows: drag the titlebar, resize from the corner; tab-row `+` opens a tab (beside the last tab), titlebar `+` opens a new window
 - Tab bar scrolls horizontally once tabs hit a readable minimum width; scrollbar gutter is reserved so layout does not jump
 - Drag tabs to reorder, drop onto another window, or drop on the desktop to detach into a new window
-- Snap left, right, corners, or full screen from the green traffic-light menu (or by dragging to an edge)
+- Snap left, right, top, bottom, corners, or full screen from the green traffic-light menu (corners nest under Top/Bottom; or drag to an edge)
 - VT parse and HTML render via libghostty-vt (`ghostty_terminal_vt_write` + HTML formatter)
 - Default Ghostty palette, fg/bg/cursor colors
 - Block cursor overlay, optional blink (DEC mode 12)

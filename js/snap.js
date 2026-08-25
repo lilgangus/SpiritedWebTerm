@@ -1,6 +1,8 @@
 const SNAP = {
     left: { x: 0, y: 0, w: 0.5, h: 1 },
     right: { x: 0.5, y: 0, w: 0.5, h: 1 },
+    top: { x: 0, y: 0, w: 1, h: 0.5 },
+    bottom: { x: 0, y: 0.5, w: 1, h: 0.5 },
     "top-left": { x: 0, y: 0, w: 0.5, h: 0.5 },
     "top-right": { x: 0.5, y: 0, w: 0.5, h: 0.5 },
     "bottom-left": { x: 0, y: 0.5, w: 0.5, h: 0.5 },
@@ -31,5 +33,7 @@ export function hitSnap(mx, my, deskW, deskH) {
     if (mx >= deskW - corner && my >= deskH - corner) return "bottom-right";
     if (mx <= edge) return "left";
     if (mx >= deskW - edge) return "right";
+    if (my <= edge) return "top";
+    if (my >= deskH - edge) return "bottom";
     return null;
 }
