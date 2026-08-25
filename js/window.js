@@ -16,9 +16,9 @@ export class TermWindow {
         this.el = desktop.windowTemplate.content.firstElementChild.cloneNode(true);
         this.titlebar = this.el.querySelector(".titlebar");
         this.tabsEl = this.el.querySelector(".tabs");
+        this.tabAddBtn = this.el.querySelector(".tab-add");
         this.panesEl = this.el.querySelector(".panes");
         this.plusBtn = this.el.querySelector(".plus");
-        this.plusMenu = this.el.querySelector(".plus-menu");
         this.snapBtn = this.el.querySelector(".snap-btn");
         this.snapMenu = this.el.querySelector(".snap-menu");
         this.grip = this.el.querySelector(".resize-grip");
@@ -178,7 +178,6 @@ export class TermWindow {
     }
 
     hideMenus() {
-        this.plusMenu.hidden = true;
         this.snapMenu.hidden = true;
     }
 
@@ -209,22 +208,20 @@ export class TermWindow {
             this.toggleMaximize();
         });
 
+        this.tabAddBtn.addEventListener("click", (event) => {
+            event.stopPropagation();
+            this.hideMenus();
+            this.addTab();
+        });
+
         this.plusBtn.addEventListener("click", (event) => {
             event.stopPropagation();
-            this.snapMenu.hidden = true;
-            this.plusMenu.hidden = !this.plusMenu.hidden;
-        });
-        this.plusMenu.addEventListener("click", (event) => {
-            const kind = event.target.closest("button")?.dataset.kind;
-            if (!kind) return;
             this.hideMenus();
-            if (kind === "tab") this.addTab();
-            else this.desktop.createWindow();
+            this.desktop.createWindow();
         });
 
         this.snapBtn.addEventListener("click", (event) => {
             event.stopPropagation();
-            this.plusMenu.hidden = true;
             this.snapMenu.hidden = !this.snapMenu.hidden;
         });
         this.snapMenu.addEventListener("click", (event) => {

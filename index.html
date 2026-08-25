@@ -21,14 +21,11 @@
                     <button type="button" class="tl min" title="Minimize"></button>
                     <button type="button" class="tl max" title="Maximize"></button>
                 </div>
-                <div class="tabs"></div>
-                <div class="plus-wrap">
-                    <button type="button" class="plus" title="New terminal" aria-label="New terminal">+</button>
-                    <div class="menu plus-menu" hidden>
-                        <button type="button" data-kind="tab">New Tab</button>
-                        <button type="button" data-kind="window">New Window</button>
-                    </div>
+                <div class="tab-strip">
+                    <div class="tabs"></div>
+                    <button type="button" class="tab-add" title="New tab" aria-label="New tab">+</button>
                 </div>
+                <button type="button" class="plus" title="New window" aria-label="New window">+</button>
                 <div class="win-title">Ghostty</div>
                 <div class="snap-wrap">
                     <button type="button" class="snap-btn" title="Snap window" aria-label="Snap window">Snap</button>
@@ -65,7 +62,14 @@
                 <div class="thumb"></div>
             </div>
             <div class="session-overlay">
-                <button type="button" class="open-session">Open Terminal</button>
+                <div class="session-actions">
+                    <button type="button" class="open-session">Open Terminal</button>
+                    <button type="button" class="view-session" hidden>View Session</button>
+                </div>
+            </div>
+            <div class="view-banner" hidden>
+                <span>Read-only — session ended</span>
+                <button type="button" class="view-new">New Terminal</button>
             </div>
             <style class="vt-palette"></style>
         </div>

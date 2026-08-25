@@ -12,6 +12,7 @@ export class Chrome {
         this.tabEl = tabEl;
         this.active = false;
         this.windowFocused = false;
+        this.readonly = false;
         this.followLive = true;
         this.fontSize = 13;
         this.cellW = 8;
@@ -30,6 +31,9 @@ export class Chrome {
         this.paletteStyle = pane.querySelector(".vt-palette");
         this.overlay = pane.querySelector(".session-overlay");
         this.openButton = pane.querySelector(".open-session");
+        this.viewButton = pane.querySelector(".view-session");
+        this.viewBanner = pane.querySelector(".view-banner");
+        this.viewNewButton = pane.querySelector(".view-new");
         this.bellEl = pane.querySelector(".bell");
         this.tabLabel = tabEl.querySelector(".tab-label");
         this.titleEl = windowEl.querySelector(".win-title");
@@ -46,19 +50,56 @@ export class Chrome {
     }
 
     setDisconnected(disconnected, hadSession = false) {
-        this.overlay.classList.toggle("hidden", !disconnected);
-        this.openButton.textContent = hadSession ? "New Terminal" : "Open Terminal";
-        if (disconnected) {
-            this.cursorEl.classList.remove("visible");
-            const label = hadSession ? "Disconnected" : "Ghostty";
-            this.tabLabel.textContent = label;
-            if (this.active) {
-                this.titleEl.textContent = label;
-                if (this.windowFocused) document.title = label;
-            }
+        if (!disconnected) {
+            this.readonly = false;
+            this.overlay.classList.add("hidden");
+            this.viewBanner.hidden = true;
+            this.viewButton.hidden = true;
             this.openButton.disabled = false;
-            if (this.active) this.openButton.focus();
+            this.viewButton.disabled = false;
+            this.viewNewButton.disabled = false;
+            return;
         }
+        this.openButton.textContent = hadSession ? "New Terminal" : "Open Terminal";
+        this.viewButton.hidden = !hadSession;
+        this.cursorEl.classList.remove("visible");
+        this.openButton.disabled = false;
+        this.viewButton.disabled = false;
+        this.viewNewButton.disabled = false;
+        if (this.readonly && hadSession) {
+            this.overlay.classList.add("hidden");
+            this.viewBanner.hidden = false;
+            this.updateTitle();
+            return;
+        }
+        this.readonly = false;
+        this.overlay.classList.remove("hidden");
+        this.viewBanner.hidden = true;
+        const label = hadSession ? "Disconnected" : "Ghostty";
+        this.tabLabel.textContent = label;
+        if (this.active) {
+            this.titleEl.textContent = label;
+            if (this.windowFocused) document.title = label;
+        }
+        if (this.active) this.openButton.focus();
+    }
+
+    viewLogs() {
+        this.readonly = true;
+        this.overlay.classList.add("hidden");
+        this.viewBanner.hidden = false;
+        this.cursorEl.classList.remove("visible");
+        this.updateTitle();
+        this.render();
+        this.screen.focus();
+    }
+
+    prepareConnect() {
+        this.readonly = false;
+        this.viewBanner.hidden = true;
+        this.openButton.disabled = true;
+        this.viewButton.disabled = true;
+        this.viewNewButton.disabled = true;
     }
 
     jumpToLive() {
@@ -187,6 +228,7 @@ export class Chrome {
                     this.updateCursor(this.term.cursor());
                 } else {
                     this.cursorEl.classList.remove("visible");
+                    if (this.readonly) this.updateTitle();
                 }
                 this.updateScrollbar(this.term.scrollbar());
             } catch (err) {

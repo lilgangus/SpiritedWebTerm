@@ -148,6 +148,14 @@ html, body {
     background: rgba(255, 255, 255, 0.22);
 }
 
+.tab-strip {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+}
+
 .tabs {
     display: flex;
     align-items: center;
@@ -155,6 +163,23 @@ html, body {
     min-width: 0;
     flex: 1;
     overflow: hidden;
+}
+
+.tab-add {
+    appearance: none;
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.88);
+    font: 16px/22px -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    cursor: pointer;
+}
+
+.tab-add:hover {
+    background: rgba(255, 255, 255, 0.14);
 }
 
 .tab {
@@ -204,7 +229,6 @@ html, body {
     display: none !important;
 }
 
-.plus-wrap,
 .snap-wrap {
     position: relative;
     flex: 0 0 auto;
@@ -267,7 +291,6 @@ html, body {
     display: none !important;
 }
 
-.plus-menu { left: 0; }
 .snap-menu { right: 0; }
 
 .menu button {
@@ -426,7 +449,16 @@ html, body {
 
 .session-overlay.hidden { display: none; }
 
-.open-session {
+.session-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+}
+
+.open-session,
+.view-session,
+.view-new {
     appearance: none;
     border: 1px solid rgba(255, 255, 255, 0.16);
     border-radius: 8px;
@@ -437,13 +469,47 @@ html, body {
     cursor: pointer;
 }
 
-.open-session:hover:not(:disabled) {
+.open-session:hover:not(:disabled),
+.view-session:hover:not(:disabled),
+.view-new:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.14);
 }
 
-.open-session:disabled {
+.open-session:disabled,
+.view-session:disabled,
+.view-new:disabled {
     opacity: 0.6;
     cursor: default;
+}
+
+.view-session[hidden] {
+    display: none !important;
+}
+
+.view-banner {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px 6px 12px;
+    border-radius: 8px;
+    background: rgba(16, 16, 18, 0.86);
+    color: rgba(255, 255, 255, 0.82);
+    font: 12px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    white-space: nowrap;
+}
+
+.view-banner[hidden] {
+    display: none !important;
+}
+
+.view-banner .view-new {
+    padding: 6px 10px;
+    font-size: 12px;
 }
 
 .resize-grip {

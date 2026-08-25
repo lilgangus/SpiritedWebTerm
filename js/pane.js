@@ -40,11 +40,9 @@ export class Pane {
             else this.dirty = true;
         });
 
-        this.ui.openButton.addEventListener("click", () => {
-            if (this.pty.open || this.pty.connecting) return;
-            this.ui.openButton.disabled = true;
-            this.pty.connect();
-        });
+        this.ui.openButton.addEventListener("click", () => this.#connect());
+        this.ui.viewNewButton.addEventListener("click", () => this.#connect());
+        this.ui.viewButton.addEventListener("click", () => this.ui.viewLogs());
 
         this.term.installEffects({
             onWritePty: (bytes) => this.pty.send(bytes),
@@ -66,6 +64,12 @@ export class Pane {
         });
         this.ui.setDisconnected(true, false);
         this.ui.render();
+    }
+
+    #connect() {
+        if (this.pty.open || this.pty.connecting) return;
+        this.ui.prepareConnect();
+        this.pty.connect();
     }
 
     setActive(active, windowFocused) {
