@@ -4,6 +4,14 @@ Goal: catch regressions that break **full-screen apps** (vim, less via `git log`
 
 These failures are easy to miss in casual use: the shell prompt looks fine until an alt-screen app runs, or until scrollback is created on the last visible row.
 
+## Running automated tests
+
+```bash
+./example/wasm-browser-term/run-tests.sh
+```
+
+Builds `ghostty-vt.wasm` if missing, then runs all Node tests under `test/` via `node --test`. No browser required. Layer 3 (manual smoke) is still below.
+
 ## What must never regress
 
 | Feature | Failure signal |
@@ -22,29 +30,32 @@ Drive `ghostty-vt.wasm` + `Terminal` / `Chrome.applyHtml` without a PTY.
 
 **Setup:** load WASM from disk, create a terminal at known `cols×rows` (e.g. 80×40).
 
-| Test | Input | Assert |
-| --- | --- | --- |
-| Full grid HTML | CUP to every row with text; last row `STATUS` | Formatted text has `rows` lines; last line is `STATUS` |
-| Blank-row padding | Fill only first 10 rows + status on last row | After `applyHtml` (or equivalent pad), DOM has exactly `rows` `.row` nodes; last row is status |
-| Alt screen | `\x1b[?1049h`, clear, fill all rows, status on last | Same as full grid; `activeScreen` / alt flag is alternate |
-| Leave alt | Then `\x1b[?1049l` | Primary content returns; row count still matches pane size |
-| Resize sync | `resize(80,40)` then pretend JS thinks 40 while WASM is still 24 | Sync path forces WASM to 40 before format; no `grid_ref` failure / full scrollback dump |
-| Viewport selection | After scrollback + alt screen | Selection uses viewport rectangle of size `cols×rows`; never asks for y ≥ WASM rows |
+| Test | File | Input | Assert |
+| --- | --- | --- | --- |
+| Full grid HTML | `terminal_grid.test.mjs` | CUP to every row with text; last row `STATUS` | Formatted text has `rows` lines; last line is `STATUS` |
+| Blank-row padding | `terminal_grid.test.mjs` | Short HTML and/or first 10 rows + status on last | After `applyHtml`, DOM has exactly `rows` `.row` nodes; VT status stays on last visual row |
+| Alt screen | `terminal_grid.test.mjs` | `\x1b[?1049h`, clear, fill all rows, status on last | Same as full grid; mode 1049 is on |
+| Leave alt | `terminal_grid.test.mjs` | Then `\x1b[?1049l` | Primary content returns; row count still matches pane size |
+| Resize sync | `terminal_grid.test.mjs` | JS wants 40 while WASM is still 24 | Sync path forces WASM to 40 before format; no `grid_ref` failure |
+| Viewport selection | `terminal_grid.test.mjs` | JS `rows` > WASM rows, then resize | Selection clamps (never asks for y ≥ WASM rows); after sync, pad paints full pane |
+| Last-line `\r` progress | `terminal_grid.test.mjs` | Full screen then CR updates on last row | Grid stays `rows` tall; last row shows final progress text |
+| `applyHtml` pad / slice | `apply_html.test.mjs` | Short HTML; HTML longer than `rows` with `followLive` on/off | Exact `.row` count; live end vs top slice; palette `<style>` extracted |
+| `urlAtColumn` | `url.test.mjs` | Plain-text URL under a column | Hit span / `https://` normalize / trailing punct trim / miss → null |
 
-Keep helpers small: `writeVt(term, bytes)`, `stripHtml(html)`, `rowTexts(screenEl)`.
+Helpers live in `test/helpers.mjs`: `writeVt`, `stripHtml`, `rowTexts`, `mockChrome`, `paint`, `syncSize`.
 
-### 2. Integration (Node + fake PTY bytes)
+### 2. Integration (Node + recorded VT)
 
-Replay recorded VT streams (or generate them) through `term.write` → `formatHtml` → row pad.
+Replay fixtures through `term.write` → `formatHtml` → `applyHtml` pad (`fixtures.test.mjs`).
 
-Suggested fixtures (store under `testdata/` later):
+Fixtures under `testdata/`:
 
 - `vim-open-status.vt` — alt screen, tilde rows, inverted status line
-- `less-git-log.vt` — alt screen, pager chrome, last line is status/prompt
+- `less-git-log.vt` — alt screen, pager chrome, last line is `(END)`
 - `git-push-last-line.vt` — primary screen full, then many `\r` progress updates on the last row
-- `exit-alt-restore.vt` — open alt, leave alt, primary prompt on last row
+- `exit-alt-restore.vt` — open alt, leave alt, primary prompt restored
 
-Assert after each fixture: `domRows === term.rows`, last non-pad content on last row when the app put it there.
+Assert after each fixture: `domRows === term.rows`, last-row / restore content when the app put it there.
 
 ### 3. Manual smoke (browser + real shell)
 
@@ -89,25 +100,32 @@ For any full-height case:
 3. Cursor / status on VT row `rows-1` appears at the bottom of `.screen`, not above a blank band.
 4. After leaving alt screen, (1)–(3) still hold for the shell.
 
-## Suggested automation shape (later)
+## Automation layout
+
+Production (`js/`, `css/`, …) stays separate from tests:
 
 ```
-testdata/*.vt          # recorded or synthetic VT
-js/test/
-  terminal_grid.test.mjs   # WASM + format + pad
-  apply_html.test.mjs      # Chrome.applyHtml row count
-scripts/manual-smoke.md    # checklist A–E (or this file)
+testdata/*.vt              # recorded / synthetic VT streams
+test/
+  helpers.mjs              # WASM load, VT helpers, Chrome mock
+  terminal_grid.test.mjs   # WASM + format + pad + resize/selection
+  apply_html.test.mjs      # Chrome.applyHtml row count / followLive
+  fixtures.test.mjs        # replay testdata/*.vt
+  url.test.mjs             # urlAtColumn (no WASM)
+run-tests.sh               # single entry: build wasm if needed + node --test
+TESTING.md                 # this plan + manual checklist A–E
 ```
 
-Prefer Node `node --test` (or similar) for layer 1–2 so CI can run without a browser. Layer 3 stays manual until Playwright/Puppeteer is worth the cost.
+Prefer Node `node --test` for layer 1–2 so CI can run without a browser. Layer 3 stays manual until Playwright/Puppeteer is worth the cost.
 
 ## When to run
 
 | Change touches | Run |
 | --- | --- |
-| `chrome.js` render / `applyHtml` / resize | Unit + manual A, B, C |
-| `terminal.js` format / selection / resize | Unit grid + selection |
-| `input.js` / wheel / followLive | Manual C, D |
+| `chrome.js` render / `applyHtml` / resize | `./run-tests.sh` + manual A, B, C |
+| `terminal.js` format / selection / resize | `./run-tests.sh` (grid + selection) |
+| `url.js` | `./run-tests.sh` (`url.test.mjs`) |
+| `input.js` / wheel / followLive | Manual C, D (+ `apply_html` followLive cases) |
 | `pane.js` connect / reset | Manual A (open session) |
 | CSS `.screen` / `.row` / cell metrics | Manual A, B, E |
 
