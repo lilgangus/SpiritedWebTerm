@@ -14,35 +14,20 @@ export const MODE_ALT_SCREEN_SAVE = 1049;
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const EXAMPLE_ROOT = join(HERE, "..");
-export const REPO_ROOT = join(EXAMPLE_ROOT, "../..");
-export const DEFAULT_WASM = join(REPO_ROOT, "zig-out/bin/ghostty-vt.wasm");
+export const DEFAULT_WASM = process.env.GHOSTTY_VT_WASM
+    ? process.env.GHOSTTY_VT_WASM
+    : join(EXAMPLE_ROOT, "ghostty-vt.wasm");
 export const TESTDATA = join(EXAMPLE_ROOT, "testdata");
 
 const encoder = new TextEncoder();
-const decoder = new TextDecoder();
 
 /** Load ghostty-vt.wasm from disk (Node has no file:// fetch). */
 export async function loadWasm(path = DEFAULT_WASM) {
     const bytes = await readFile(path);
-    let instance;
-    const result = await WebAssembly.instantiate(bytes, {
-        env: {
-            log: (ptr, len) => {
-                const heap = new Uint8Array(instance.exports.memory.buffer, ptr, len);
-                console.error("[wasm]", decoder.decode(heap));
-            },
-        },
-    });
-    instance = result.instance;
-    const jsonPtr = instance.exports.ghostty_type_json();
-    const json = decoder
-        .decode(new Uint8Array(
-            instance.exports.memory.buffer,
-            jsonPtr,
-            Math.min(1 << 20, instance.exports.memory.buffer.byteLength - jsonPtr),
-        ))
-        .split("\0")[0];
-    return new Wasm(instance, JSON.parse(json));
+    const imports = Wasm.instantiateImports();
+    const result = await WebAssembly.instantiate(bytes, { env: imports.env });
+    imports.setInstance(result.instance);
+    return Wasm.fromInstance(result.instance);
 }
 
 export function createTerm(wasm, cols = 80, rows = 40) {

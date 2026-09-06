@@ -7,10 +7,12 @@ These failures are easy to miss in casual use: the shell prompt looks fine until
 ## Running automated tests
 
 ```bash
-./example/wasm-browser-term/run-tests.sh
+./run-tests.sh
 ```
 
-Builds `ghostty-vt.wasm` if missing, then runs all Node tests under `test/` via `node --test`. No browser required. Layer 3 (manual smoke) is still below.
+Builds `ghostty-vt.wasm` if missing (from `GHOSTTY_ROOT` or a parent Ghostty
+checkout), then runs Node tests under `test/` via `node --test` plus
+`test/origin_test.py`. No browser required. Layer 3 (manual smoke) is still below.
 
 ## What must never regress
 
@@ -112,7 +114,8 @@ test/
   apply_html.test.mjs      # Chrome.applyHtml row count / followLive
   fixtures.test.mjs        # replay testdata/*.vt
   url.test.mjs             # urlAtColumn (no WASM)
-run-tests.sh               # single entry: build wasm if needed + node --test
+  origin_test.py           # /ws Origin allow-list (no WASM)
+run-tests.sh               # wasm if needed + node --test + origin_test.py
 TESTING.md                 # this plan + manual checklist A–E
 ```
 
@@ -125,6 +128,7 @@ Prefer Node `node --test` for layer 1–2 so CI can run without a browser. Layer
 | `chrome.js` render / `applyHtml` / resize | `./run-tests.sh` + manual A, B, C |
 | `terminal.js` format / selection / resize | `./run-tests.sh` (grid + selection) |
 | `url.js` | `./run-tests.sh` (`url.test.mjs`) |
+| `server.py` Origin / loopback | `python3 test/origin_test.py` |
 | `input.js` / wheel / followLive | Manual C, D (+ `apply_html` followLive cases) |
 | `pane.js` connect / reset | Manual A (open session) |
 | CSS `.screen` / `.row` / cell metrics | Manual A, B, E |

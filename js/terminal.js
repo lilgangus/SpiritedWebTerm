@@ -15,7 +15,7 @@ export class Terminal {
     create() {
         const out = this.wasm.exports.ghostty_wasm_alloc_opaque();
         const created = this.wasm.exports.ghostty_terminal_new(0, out, this.cols, this.rows);
-        this.ptr = this.wasm.u32(out);
+        this.ptr = this.wasm.takeOpaque(out);
         this.wasm.exports.ghostty_wasm_free_opaque(out);
         if (created !== C.SUCCESS) throw new Error(`ghostty_terminal_new failed: ${created}`);
         this.#setUsize(C.OPT_SCROLLBACK_BYTES, C.SCROLLBACK_BYTES);
@@ -25,10 +25,10 @@ export class Terminal {
     }
 
     #setUsize(opt, value) {
-        const ptr = this.wasm.exports.ghostty_wasm_alloc_usize();
-        this.wasm.setU32(ptr, value);
+        const ptr = this.wasm.allocUsize();
+        this.wasm.setUsize(ptr, value);
         this.wasm.exports.ghostty_terminal_set(this.ptr, opt, ptr);
-        this.wasm.exports.ghostty_wasm_free_usize(ptr);
+        this.wasm.freeUsize(ptr);
     }
 
     #allocRgb(r, g, b) {
@@ -147,13 +147,13 @@ export class Terminal {
     }
 
     viewportActive() {
-        const ptr = this.wasm.exports.ghostty_wasm_alloc_u8();
+        const ptr = this.wasm.allocU8();
         try {
             const result = this.wasm.exports.ghostty_terminal_get(this.ptr, C.DATA_VIEWPORT_ACTIVE, ptr);
             if (result !== C.SUCCESS) return true;
             return new DataView(this.wasm.buffer).getUint8(ptr) !== 0;
         } finally {
-            this.wasm.exports.ghostty_wasm_free_u8(ptr);
+            this.wasm.freeU8(ptr);
         }
     }
 
@@ -182,36 +182,36 @@ export class Terminal {
     }
 
     boolData(id) {
-        const ptr = this.wasm.exports.ghostty_wasm_alloc_u8();
+        const ptr = this.wasm.allocU8();
         try {
             const result = this.wasm.exports.ghostty_terminal_get(this.ptr, id, ptr);
             if (result !== C.SUCCESS) return false;
             return new DataView(this.wasm.buffer).getUint8(ptr) !== 0;
         } finally {
-            this.wasm.exports.ghostty_wasm_free_u8(ptr);
+            this.wasm.freeU8(ptr);
         }
     }
 
     usizeData(id) {
-        const ptr = this.wasm.exports.ghostty_wasm_alloc_usize();
+        const ptr = this.wasm.allocUsize();
         try {
             const result = this.wasm.exports.ghostty_terminal_get(this.ptr, id, ptr);
             if (result !== C.SUCCESS) return 0;
-            return this.wasm.u32(ptr);
+            return this.wasm.usize(ptr);
         } finally {
-            this.wasm.exports.ghostty_wasm_free_usize(ptr);
+            this.wasm.freeUsize(ptr);
         }
     }
 
     /** COLS/ROWS/CURSOR_* are CellCountInt (u16) in libghostty-vt. */
     cellCountData(id) {
-        const ptr = this.wasm.exports.ghostty_wasm_alloc_u16_array(1);
+        const ptr = this.wasm.allocU16();
         try {
             const result = this.wasm.exports.ghostty_terminal_get(this.ptr, id, ptr);
             if (result !== C.SUCCESS) return 0;
             return new DataView(this.wasm.buffer).getUint16(ptr, true);
         } finally {
-            this.wasm.exports.ghostty_wasm_free_u16_array(ptr, 1);
+            this.wasm.freeU16(ptr);
         }
     }
 
@@ -258,9 +258,9 @@ export class Terminal {
 
     cursor() {
         if (!this.viewportActive()) return { x: 0, y: 0, visible: false };
-        const xPtr = this.wasm.exports.ghostty_wasm_alloc_u16_array(1);
-        const yPtr = this.wasm.exports.ghostty_wasm_alloc_u16_array(1);
-        const visPtr = this.wasm.exports.ghostty_wasm_alloc_u8();
+        const xPtr = this.wasm.allocU16();
+        const yPtr = this.wasm.allocU16();
+        const visPtr = this.wasm.allocU8();
         try {
             const rx = this.wasm.exports.ghostty_terminal_get(this.ptr, C.DATA_CURSOR_X, xPtr);
             const ry = this.wasm.exports.ghostty_terminal_get(this.ptr, C.DATA_CURSOR_Y, yPtr);
@@ -275,9 +275,9 @@ export class Terminal {
                 visible: view.getUint8(visPtr) !== 0,
             };
         } finally {
-            this.wasm.exports.ghostty_wasm_free_u16_array(xPtr, 1);
-            this.wasm.exports.ghostty_wasm_free_u16_array(yPtr, 1);
-            this.wasm.exports.ghostty_wasm_free_u8(visPtr);
+            this.wasm.freeU16(xPtr);
+            this.wasm.freeU16(yPtr);
+            this.wasm.freeU8(visPtr);
         }
     }
 
@@ -291,7 +291,7 @@ export class Terminal {
         return this.#format(C.FORMAT_HTML, selPtr);
     }
 
-    /** Case-insensitive scrollback search; matches are newest-first. */
+    /** Case-insensitive scrollback search; matches are top-to-bottom. */
     searchNeedle(needle) {
         if (!needle) return [];
         const sb = this.scrollbar();
@@ -315,7 +315,6 @@ export class Terminal {
                 idx += needle.length;
             }
         }
-        matches.sort((a, b) => b.y - a.y || b.x - a.x);
         return matches;
     }
 
@@ -380,24 +379,24 @@ export class Terminal {
             this.wasm.exports.ghostty_wasm_free_opaque(fmtOut);
             throw new Error(`ghostty_formatter_terminal_new failed: ${fmtResult}`);
         }
-        const fmtPtr = this.wasm.u32(fmtOut);
+        const fmtPtr = this.wasm.takeOpaque(fmtOut);
         this.wasm.exports.ghostty_wasm_free_opaque(fmtOut);
 
         const outPtrPtr = this.wasm.exports.ghostty_wasm_alloc_opaque();
-        const outLenPtr = this.wasm.exports.ghostty_wasm_alloc_usize();
+        const outLenPtr = this.wasm.allocUsize();
         const formatResult = this.wasm.exports.ghostty_formatter_format_alloc(fmtPtr, 0, outPtrPtr, outLenPtr);
         if (formatResult !== C.SUCCESS) {
             this.wasm.exports.ghostty_formatter_free(fmtPtr);
             this.wasm.exports.ghostty_wasm_free_opaque(outPtrPtr);
-            this.wasm.exports.ghostty_wasm_free_usize(outLenPtr);
+            this.wasm.freeUsize(outLenPtr);
             throw new Error(`ghostty_formatter_format_alloc failed: ${formatResult}`);
         }
-        const outPtr = this.wasm.u32(outPtrPtr);
-        const outLen = this.wasm.u32(outLenPtr);
+        const outPtr = this.wasm.takeOpaque(outPtrPtr);
+        const outLen = this.wasm.usize(outLenPtr);
         const text = new TextDecoder().decode(this.wasm.bytes(outPtr, outLen));
         this.wasm.exports.ghostty_free(0, outPtr, outLen);
         this.wasm.exports.ghostty_wasm_free_opaque(outPtrPtr);
-        this.wasm.exports.ghostty_wasm_free_usize(outLenPtr);
+        this.wasm.freeUsize(outLenPtr);
         this.wasm.exports.ghostty_formatter_free(fmtPtr);
         return text;
     }
@@ -489,20 +488,20 @@ export class Terminal {
             if (unshifted) {
                 this.wasm.exports.ghostty_key_event_set_unshifted_codepoint(eventPtr, unshifted);
             }
-            const needPtr = this.wasm.exports.ghostty_wasm_alloc_usize();
+            const needPtr = this.wasm.allocUsize();
             this.wasm.exports.ghostty_key_encoder_encode(this.keyEncoder, eventPtr, 0, 0, needPtr);
-            const need = this.wasm.u32(needPtr);
+            const need = this.wasm.usize(needPtr);
             const bufPtr = this.wasm.alloc(need || 1);
-            const writtenPtr = this.wasm.exports.ghostty_wasm_alloc_usize();
+            const writtenPtr = this.wasm.allocUsize();
             const encoded = this.wasm.exports.ghostty_key_encoder_encode(
                 this.keyEncoder, eventPtr, bufPtr, need, writtenPtr
             );
             let out = null;
             if (encoded === C.SUCCESS) {
-                out = this.wasm.bytes(bufPtr, this.wasm.u32(writtenPtr)).slice();
+                out = this.wasm.bytes(bufPtr, this.wasm.usize(writtenPtr)).slice();
             }
-            this.wasm.exports.ghostty_wasm_free_usize(needPtr);
-            this.wasm.exports.ghostty_wasm_free_usize(writtenPtr);
+            this.wasm.freeUsize(needPtr);
+            this.wasm.freeUsize(writtenPtr);
             this.wasm.free(bufPtr, need || 1);
             return out;
         } finally {
@@ -523,34 +522,34 @@ export class Terminal {
             return null;
         }
         const bracketed = this.mode(C.MODE_BRACKETED_PASTE) ? 1 : 0;
-        const writtenPtr = this.wasm.exports.ghostty_wasm_alloc_usize();
+        const writtenPtr = this.wasm.allocUsize();
         this.wasm.exports.ghostty_paste_encode(dataPtr, src.length, bracketed, 0, 0, writtenPtr);
-        const needed = Math.max(this.wasm.u32(writtenPtr), src.length + 16);
+        const needed = Math.max(this.wasm.usize(writtenPtr), src.length + 16);
         const outPtr = this.wasm.alloc(needed);
         const result = this.wasm.exports.ghostty_paste_encode(
             dataPtr, src.length, bracketed, outPtr, needed, writtenPtr
         );
         const out = result === C.SUCCESS
-            ? this.wasm.bytes(outPtr, this.wasm.u32(writtenPtr)).slice()
+            ? this.wasm.bytes(outPtr, this.wasm.usize(writtenPtr)).slice()
             : null;
         this.wasm.free(outPtr, needed);
         this.wasm.free(dataPtr, src.length || 1);
-        this.wasm.exports.ghostty_wasm_free_usize(writtenPtr);
+        this.wasm.freeUsize(writtenPtr);
         return out;
     }
 
     encodeFocus(gained) {
         if (!this.mode(C.MODE_FOCUS_EVENT)) return null;
-        const writtenPtr = this.wasm.exports.ghostty_wasm_alloc_usize();
+        const writtenPtr = this.wasm.allocUsize();
         const bufPtr = this.wasm.alloc(8);
         const result = this.wasm.exports.ghostty_focus_encode(
             gained ? C.FOCUS_IN : C.FOCUS_OUT, bufPtr, 8, writtenPtr
         );
         const out = result === C.SUCCESS
-            ? this.wasm.bytes(bufPtr, this.wasm.u32(writtenPtr)).slice()
+            ? this.wasm.bytes(bufPtr, this.wasm.usize(writtenPtr)).slice()
             : null;
         this.wasm.free(bufPtr, 8);
-        this.wasm.exports.ghostty_wasm_free_usize(writtenPtr);
+        this.wasm.freeUsize(writtenPtr);
         return out;
     }
 
@@ -567,16 +566,16 @@ export class Terminal {
         } catch {
             return null;
         }
-        const writtenPtr = this.wasm.exports.ghostty_wasm_alloc_usize();
+        const writtenPtr = this.wasm.allocUsize();
         const bufPtr = this.wasm.alloc(64);
         const result = this.wasm.exports.ghostty_mouse_encoder_encode(
             this.mouseEncoder, this.mouseEvent, bufPtr, 64, writtenPtr
         );
         const out = result === C.SUCCESS
-            ? this.wasm.bytes(bufPtr, this.wasm.u32(writtenPtr)).slice()
+            ? this.wasm.bytes(bufPtr, this.wasm.usize(writtenPtr)).slice()
             : null;
         this.wasm.free(bufPtr, 64);
-        this.wasm.exports.ghostty_wasm_free_usize(writtenPtr);
+        this.wasm.freeUsize(writtenPtr);
         return out && out.length ? out : null;
     }
 }

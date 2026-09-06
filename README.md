@@ -1,18 +1,19 @@
-# WebAssembly Browser Terminal (PTY)
+# SpiritedWebTerm
 
-A Ghostty-like frontend for a real host shell. The page is chrome and input
-only: **libghostty-vt** (WASM) parses all VT output and encodes keys, paste,
-focus, and mouse into PTY bytes.
+A Ghostty-like frontend for a real host shell in the browser. The page is
+chrome and input only: **libghostty-vt** (`ghostty-vt.wasm`) parses all VT
+output and encodes keys, paste, focus, and mouse into PTY bytes.
 
 See [FEATURES.md](FEATURES.md) for what works and what does not.
 See [TESTING.md](TESTING.md) for a regression plan (vim, less/`git log`, last-line `git push`).
+See [NOTICE](NOTICE) for Ghostty / libghostty-vt attribution.
 
 ## Layout
 
 No bundler — the browser loads ES modules directly.
 
 ```
-example/wasm-browser-term/
+.
   index.html          markup only
   css/app.css         window chrome + screen
   js/main.js          boots wasm and the desktop
@@ -25,28 +26,51 @@ example/wasm-browser-term/
   js/input.js         keyboard, clipboard, mouse, wheel
   js/pty.js           WebSocket PTY client
   js/chrome.js        cursor, scrollbar, title, cell metrics
+  js/search.js        in-pane find
+  js/url.js           plain URL hit-testing
   js/constants.js     libghostty-vt ABI values
   js/keymap.js        event.code → GhosttyKey
-  server.py           static files + PTY WebSocket
+  server.py           static files + PTY WebSocket (loopback)
   package.json        marks js/ as ES modules
   run.sh
+  run-tests.sh
+  scripts/fetch-or-build-wasm.sh
+  ghostty-vt.wasm     not committed — build or copy locally
 ```
 
 `js/wasm.js`, `js/terminal.js`, `js/input.js`, and `js/pty.js` are reusable.
-The rest of `js/` is this example's desktop chrome.
+The rest of `js/` is this app's desktop chrome.
 
-## Building
+## Getting `ghostty-vt.wasm`
+
+This repo does not vendor the WASM binary. Build it from
+[ghostty-org/ghostty](https://github.com/ghostty-org/ghostty):
 
 ```bash
+# in a Ghostty checkout
 zig build -Demit-lib-vt -Dtarget=wasm32-freestanding -Doptimize=ReleaseSmall
+cp zig-out/bin/ghostty-vt.wasm /path/to/SpiritedWebTerm/ghostty-vt.wasm
 ```
+
+Or from this tree (detects a parent Ghostty checkout automatically when
+this project lives at `example/wasm-browser-term`):
+
+```bash
+./scripts/fetch-or-build-wasm.sh
+# or: GHOSTTY_ROOT=/path/to/ghostty ./scripts/fetch-or-build-wasm.sh
+# or: GHOSTTY_ROOT=/path/to/ghostty ./run.sh
+```
+
+Override path with `GHOSTTY_VT_WASM=/path/to/ghostty-vt.wasm`.
+
+This frontend uses current libghostty-vt WASM helpers
+(`ghostty_wasm_alloc_u8_array`, `ghostty_wasm_alloc_opaque`, …) and
+`ghostty_type_json` (flat struct map, or schema-1 `{ types, abi }` if present).
 
 ## Running
 
-`run.sh` and `server.py` find the repo root from their own paths:
-
 ```bash
-./example/wasm-browser-term/run.sh
+./run.sh
 ```
 
 Then open:
@@ -55,7 +79,16 @@ Then open:
 http://127.0.0.1:8001/
 ```
 
-Optional env vars: `PORT` (default `8001`), `SHELL`, `COLS`, `ROWS`.
+Optional env vars: `PORT` (default `8001`), `SHELL`, `COLS`, `ROWS`,
+`GHOSTTY_VT_WASM`, `GHOSTTY_ROOT`.
+
+## Tests
+
+```bash
+./run-tests.sh
+```
+
+URL-only tests (no WASM): `node --test test/url.test.mjs`
 
 ## Input
 
@@ -65,8 +98,15 @@ Optional env vars: `PORT` (default `8001`), `SHELL`, `COLS`, `ROWS`.
 | Cmd+C (macOS) or Ctrl+Shift+C | Copy selection |
 | Cmd+V (macOS) or Ctrl+Shift+V | Paste (`ghostty_paste_encode`) |
 | Cmd+A / Ctrl+Shift+A | Select all |
+| Cmd+F (macOS) or Ctrl+Shift+F | Find in scrollback |
 | Cmd+/Ctrl + `+` `-` `0` | Font size |
 | Wheel / scrollbar | Scrollback (Shift+wheel if the app is tracking the mouse) |
+| Click a plain http(s) URL | Open in a new browser tab |
 
-**Security:** this exposes a real interactive shell on localhost. Do not
-bind it to a public interface or expose it beyond a trusted machine.
+## Security
+
+This exposes a **real interactive shell** on **127.0.0.1** only. Browser
+WebSocket upgrades to `/ws` are rejected when `Origin` is present and does not
+match the request host (loopback aliases `localhost` / `127.0.0.1` / `::1` are
+treated as equivalent). There is still **no login**; do not bind this to a
+public interface or expose it beyond a trusted machine.

@@ -1,0 +1,15 @@
+SpiritedWebTerm
+===============
+
+This project includes a browser frontend inspired by / derived from Ghostty's
+WebAssembly terminal examples and depends at runtime on libghostty-vt
+(ghostty-vt.wasm) from the Ghostty project:
+
+  https://github.com/ghostty-org/ghostty
+
+Ghostty is MIT-licensed:
+  Copyright (c) 2024 Mitchell Hashimoto, Ghostty contributors
+
+The ghostty-vt.wasm binary is not redistributed in this repository by default.
+Build or obtain it separately (see README.md / scripts/fetch-or-build-wasm.sh)
+and comply with Ghostty's license when you distribute that binary.

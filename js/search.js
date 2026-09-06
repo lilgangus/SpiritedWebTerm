@@ -40,8 +40,8 @@ export class Search {
                 }
             }
         });
-        this.prevBtn.addEventListener("click", () => this.next());
-        this.nextBtn.addEventListener("click", () => this.previous());
+        this.prevBtn.addEventListener("click", () => this.previous());
+        this.nextBtn.addEventListener("click", () => this.next());
         this.closeBtn.addEventListener("click", () => this.close());
     }
 
@@ -88,9 +88,9 @@ export class Search {
             this.selected = -1;
         } else if (prev) {
             const idx = this.matches.findIndex((m) => m.y === prev.y && m.x === prev.x);
-            this.selected = idx >= 0 ? idx : 0;
+            this.selected = idx >= 0 ? idx : this.matches.length - 1;
         } else {
-            this.selected = 0;
+            this.selected = this.matches.length - 1;
         }
         if (scroll && this.selected >= 0) {
             this.term.scrollToScreenRow(this.matches[this.selected].y);

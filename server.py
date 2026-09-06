@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Minimal HTTP + WebSocket PTY bridge for the wasm browser terminal example.
+"""Minimal HTTP + WebSocket PTY bridge for SpiritedWebTerm.
 
 Serves static files on PORT (default 8001) and bridges /ws to a real shell
 running in a PTY. No third-party dependencies (stdlib only).
+
+Binds 127.0.0.1 only. Browser WebSocket upgrades must present a same-origin
+(or loopback-alias) Origin when the Origin header is sent.
 """
 
 from __future__ import annotations
@@ -27,8 +30,17 @@ ROWS = int(os.environ.get("ROWS", "24"))
 SHELL = os.environ.get("SHELL", "/bin/bash")
 
 HERE = Path(__file__).resolve().parent
-REPO_ROOT = HERE.parent.parent
-WASM_PATH = REPO_ROOT / "zig-out" / "bin" / "ghostty-vt.wasm"
+
+
+def resolve_wasm_path() -> Path:
+    """Prefer GHOSTTY_VT_WASM, else ./ghostty-vt.wasm next to this server."""
+    env = os.environ.get("GHOSTTY_VT_WASM")
+    if env:
+        return Path(env).expanduser().resolve()
+    return (HERE / "ghostty-vt.wasm").resolve()
+
+
+WASM_PATH = resolve_wasm_path()
 
 WS_MAGIC = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
@@ -231,6 +243,55 @@ def bridge_pty(conn: socket.socket, cols: int, rows: int) -> None:
             pass
 
 
+def request_host_without_port(handler: BaseHTTPRequestHandler) -> str:
+    host = (handler.headers.get("Host") or "").strip().lower()
+    if not host:
+        return ""
+    # Strip port; keep IPv6 bracket form if present.
+    if host.startswith("["):
+        end = host.find("]")
+        return host[: end + 1] if end != -1 else host
+    return host.split(":", 1)[0]
+
+
+def origin_host(origin: str) -> str | None:
+    """Return lowercase hostname from an Origin URL, or None if unparseable."""
+    origin = (origin or "").strip()
+    if not origin or origin == "null":
+        return None
+    try:
+        parsed = urlparse(origin)
+        if parsed.scheme not in ("http", "https"):
+            return None
+        host = (parsed.hostname or "").lower()
+        return host or None
+    except ValueError:
+        return None
+
+
+def origin_allowed(handler: BaseHTTPRequestHandler) -> bool:
+    """Same-origin check for /ws. Missing Origin is allowed (non-browser clients)."""
+    raw = handler.headers.get("Origin")
+    if raw is None or raw == "":
+        return True
+    oh = origin_host(raw)
+    if oh is None:
+        return False
+    req = request_host_without_port(handler)
+    # Compare hostnames only (ignore port differences).
+    if req.startswith("[") and req.endswith("]"):
+        req_host = req[1:-1]
+    else:
+        req_host = req
+    if oh == req_host:
+        return True
+    # Common loopback aliases when Host is 127.0.0.1 / localhost / ::1
+    loopback = {"127.0.0.1", "localhost", "::1"}
+    if oh in loopback and req_host in loopback:
+        return True
+    return False
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -252,6 +313,10 @@ class Handler(BaseHTTPRequestHandler):
         upgrade = (self.headers.get("Upgrade") or "").lower()
         if not key or upgrade != "websocket":
             self.send_error(400, "Expected WebSocket upgrade")
+            return
+
+        if not origin_allowed(self):
+            self.send_error(403, "WebSocket Origin not allowed")
             return
 
         accept = ws_accept_key(key)
@@ -314,13 +379,20 @@ def main() -> None:
     if not WASM_PATH.is_file():
         sys.stderr.write(
             f"warning: {WASM_PATH} not found.\n"
-            "Build with:\n"
+            "Place ghostty-vt.wasm next to server.py, or set GHOSTTY_VT_WASM.\n"
+            "Build from a Ghostty checkout:\n"
             "  zig build -Demit-lib-vt -Dtarget=wasm32-freestanding -Doptimize=ReleaseSmall\n"
+            "  cp zig-out/bin/ghostty-vt.wasm ./ghostty-vt.wasm\n"
+            "Or: GHOSTTY_ROOT=/path/to/ghostty ./scripts/fetch-or-build-wasm.sh\n"
         )
 
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     sys.stderr.write(f"Browser terminal: http://127.0.0.1:{PORT}/\n")
     sys.stderr.write(f"WebSocket PTY:    ws://127.0.0.1:{PORT}/ws  ({SHELL}, {COLS}x{ROWS})\n")
+    sys.stderr.write(
+        "Security: loopback only; /ws rejects cross-origin browser Origins. "
+        "Do not bind this beyond a trusted machine.\n"
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:
