@@ -1,33 +1,59 @@
 /**
  * Thin helpers around ghostty-vt.wasm: load, heap access, sized-struct fields.
+ *
+ * Uses libghostty-vt's typed WASM allocators (`ghostty_wasm_alloc_*`).
+ * `ghostty_type_json` may be a flat struct map or schema-1 `{ types, abi }`.
  */
 export class Wasm {
-    constructor(instance, layout) {
+    /**
+     * @param {WebAssembly.Instance} instance
+     * @param {Record<string, any>} layout  struct map (schema-1 `types`, or flat)
+     * @param {{ pointer_size?: number, usize_size?: number }} [abi]
+     */
+    constructor(instance, layout, abi = {}) {
         this.instance = instance;
         this.layout = layout;
+        this.abi = {
+            pointer_size: abi.pointer_size ?? 4,
+            usize_size: abi.usize_size ?? 4,
+        };
     }
 
-    static async load(url) {
-        const bytes = await fetch(url).then((r) => r.arrayBuffer());
+    static instantiateImports() {
         let instance;
-        const result = await WebAssembly.instantiate(bytes, {
+        return {
             env: {
                 log: (ptr, len) => {
                     const heap = new Uint8Array(instance.exports.memory.buffer, ptr, len);
                     console.log("[wasm]", new TextDecoder().decode(heap));
                 },
             },
-        });
-        instance = result.instance;
+            setInstance(value) {
+                instance = value;
+            },
+        };
+    }
+
+    static fromInstance(instance) {
         const jsonPtr = instance.exports.ghostty_type_json();
-        const json = new TextDecoder()
-            .decode(new Uint8Array(
-                instance.exports.memory.buffer,
-                jsonPtr,
-                instance.exports.memory.buffer.byteLength - jsonPtr
-            ))
-            .split("\0")[0];
-        return new Wasm(instance, JSON.parse(json));
+        const mem = instance.exports.memory.buffer;
+        const heap = new Uint8Array(mem, jsonPtr, Math.min(1 << 20, mem.byteLength - jsonPtr));
+        const end = heap.indexOf(0);
+        const parsed = JSON.parse(new TextDecoder().decode(heap.subarray(0, end === -1 ? heap.length : end)));
+        const layout = parsed.types || parsed;
+        const abi = parsed.abi || {};
+        return new Wasm(instance, layout, abi);
+    }
+
+    static async load(url) {
+        const bytes = await fetch(url).then((r) => {
+            if (!r.ok) throw new Error(`failed to fetch ${url}: ${r.status}`);
+            return r.arrayBuffer();
+        });
+        const imports = Wasm.instantiateImports();
+        const result = await WebAssembly.instantiate(bytes, { env: imports.env });
+        imports.setInstance(result.instance);
+        return Wasm.fromInstance(result.instance);
     }
 
     get exports() {
@@ -54,12 +80,73 @@ export class Wasm {
         new DataView(this.buffer).setUint32(ptr, value, true);
     }
 
+    usize(ptr) {
+        if (this.abi.usize_size === 8) {
+            return Number(new DataView(this.buffer).getBigUint64(ptr, true));
+        }
+        return this.u32(ptr);
+    }
+
+    setUsize(ptr, value) {
+        if (this.abi.usize_size === 8) {
+            new DataView(this.buffer).setBigUint64(ptr, BigInt(value), true);
+        } else {
+            this.setU32(ptr, value);
+        }
+    }
+
+    #must(ptr, what) {
+        if (!ptr) throw new Error(`${what} failed`);
+        return ptr;
+    }
+
+    /** Host-owned scratch buffer (`ghostty_wasm_alloc_u8_array`). */
     alloc(n) {
-        return this.exports.ghostty_wasm_alloc_u8_array(n);
+        if (!n) return 0;
+        return this.#must(
+            this.exports.ghostty_wasm_alloc_u8_array(n),
+            `ghostty_wasm_alloc_u8_array(${n})`,
+        );
     }
 
     free(ptr, n) {
+        if (!ptr) return;
         this.exports.ghostty_wasm_free_u8_array(ptr, n);
+    }
+
+    allocU8() {
+        return this.#must(this.exports.ghostty_wasm_alloc_u8(), "ghostty_wasm_alloc_u8");
+    }
+
+    freeU8(ptr) {
+        if (ptr) this.exports.ghostty_wasm_free_u8(ptr);
+    }
+
+    allocU16() {
+        return this.#must(
+            this.exports.ghostty_wasm_alloc_u16_array(1),
+            "ghostty_wasm_alloc_u16_array",
+        );
+    }
+
+    freeU16(ptr) {
+        if (ptr) this.exports.ghostty_wasm_free_u16_array(ptr, 1);
+    }
+
+    allocUsize() {
+        return this.#must(this.exports.ghostty_wasm_alloc_usize(), "ghostty_wasm_alloc_usize");
+    }
+
+    freeUsize(ptr) {
+        if (ptr) this.exports.ghostty_wasm_free_usize(ptr);
+    }
+
+    /** Read an opaque handle from a `ghostty_wasm_alloc_opaque` slot. */
+    takeOpaque(slot) {
+        if (this.abi.pointer_size === 8) {
+            return Number(new DataView(this.buffer).getBigUint64(slot, true));
+        }
+        return this.u32(slot);
     }
 
     field(structName, fieldName) {
@@ -109,9 +196,12 @@ export class Wasm {
     }
 
     newHandle(exportName) {
-        const out = this.exports.ghostty_wasm_alloc_opaque();
+        const out = this.#must(
+            this.exports.ghostty_wasm_alloc_opaque(),
+            "ghostty_wasm_alloc_opaque",
+        );
         const result = this.exports[exportName](0, out);
-        const ptr = this.u32(out);
+        const ptr = this.takeOpaque(out);
         this.exports.ghostty_wasm_free_opaque(out);
         return { result, ptr };
     }

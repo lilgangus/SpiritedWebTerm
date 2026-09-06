@@ -1,4 +1,4 @@
-# wasm-browser-term: features and limits
+# SpiritedWebTerm: features and limits
 
 A small Ghostty-like frontend. Host PTY bytes go through `ghostty-vt.wasm`;
 keystrokes, paste, focus, and mouse reports go back through the same library
@@ -22,6 +22,8 @@ and then to the PTY.
 - Unsafe-paste confirmation (newlines / paste terminator)
 - Cmd/Ctrl+A select all, middle-click paste
 - Cmd/Ctrl + / - / 0 font size
+- In-pane find (`Cmd+F` / `Ctrl+Shift+F`; `js/search.js`)
+- Plain-text URL detection and click-to-open (http/https; not full OSC 8 hyperlinks)
 - IME composition committed as paste
 - Scrollback: wheel, scrollbar (Shift+wheel still scrolls when mouse tracking is on)
 - Alternate-screen mouse tracking (when the program enables it)
@@ -35,7 +37,7 @@ and then to the PTY.
 - No splits, command palette, or config file
 - Copy is DOM selection, not Ghostty’s cell selection gestures
 - Mouse encoding depends on the WASM C ABI for positions; tracking apps may mis-hit
-- No OSC 52 clipboard write, images, or URL/OSC 8 click handling
+- No OSC 52 clipboard write, images, or full OSC 8 hyperlink protocol (plain URL click only)
 - Font is the browser stack (JetBrains Mono if installed), not Ghostty’s bundled face
 - WASM effect callbacks need a growable function table; without it, DA replies and bell are skipped
 - Localhost PTY only; not a remote or multi-user terminal

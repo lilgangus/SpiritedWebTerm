@@ -1,0 +1,7 @@
+ghostty-vt.wasm
+__pycache__/
+*.pyc
+.DS_Store
+node_modules/
+.zig-cache/
+zig-out/
